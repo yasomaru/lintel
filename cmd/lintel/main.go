@@ -4,8 +4,10 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -19,6 +21,9 @@ import (
 
 // version is set by goreleaser at release time.
 var version = "dev"
+
+// errViolations signals check failure; main maps it to exit code 1.
+var errViolations = errors.New("check failed: violations found")
 
 const usage = `lintel — architecture lint for any language
 
@@ -42,29 +47,9 @@ func main() {
 		fmt.Fprint(os.Stderr, usage)
 		os.Exit(2)
 	}
-	var err error
-	switch os.Args[1] {
-	case "check":
-		err = runCheck(os.Args[2:], false)
-	case "baseline":
-		err = runCheck(os.Args[2:], true)
-	case "graph":
-		err = runGraph(os.Args[2:])
-	case "init":
-		err = runInit(os.Args[2:])
-	case "rules":
-		err = runRules(os.Args[2:])
-	case "context":
-		err = runContext(os.Args[2:])
-	case "schema":
-		_, err = os.Stdout.Write(config.SchemaJSON)
-	case "version", "--version", "-v":
-		fmt.Println("lintel", version)
-	case "help", "--help", "-h":
-		fmt.Print(usage)
-	default:
-		fmt.Fprintf(os.Stderr, "unknown command %q\n\n%s", os.Args[1], usage)
-		os.Exit(2)
+	err := run(os.Stdout, os.Args[1], os.Args[2:])
+	if errors.Is(err, errViolations) {
+		os.Exit(1)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "lintel:", err)
@@ -72,7 +57,36 @@ func main() {
 	}
 }
 
-func runCheck(args []string, writeBaseline bool) error {
+// run dispatches a subcommand, writing user output to w.
+func run(w io.Writer, command string, args []string) error {
+	switch command {
+	case "check":
+		return runCheck(w, args, false)
+	case "baseline":
+		return runCheck(w, args, true)
+	case "graph":
+		return runGraph(w, args)
+	case "init":
+		return runInit(w, args)
+	case "rules":
+		return runRules(w, args)
+	case "context":
+		return runContext(w, args)
+	case "schema":
+		_, err := w.Write(config.SchemaJSON)
+		return err
+	case "version", "--version", "-v":
+		_, err := fmt.Fprintln(w, "lintel", version)
+		return err
+	case "help", "--help", "-h":
+		_, err := fmt.Fprint(w, usage)
+		return err
+	default:
+		return fmt.Errorf("unknown command %q\n\n%s", command, usage)
+	}
+}
+
+func runCheck(w io.Writer, args []string, writeBaseline bool) error {
 	fs := flag.NewFlagSet("check", flag.ExitOnError)
 	cfgPath := fs.String("config", "", "config file path")
 	format := fs.String("format", "text", "output format: text | json")
@@ -106,7 +120,7 @@ func runCheck(args []string, writeBaseline bool) error {
 		if err := rules.WriteBaseline(baselinePath, violations); err != nil {
 			return err
 		}
-		fmt.Printf("baseline written: %s (%d violation(s))\n", baselinePath, len(violations))
+		fmt.Fprintf(w, "baseline written: %s (%d violation(s))\n", baselinePath, len(violations))
 		return nil
 	}
 
@@ -130,18 +144,18 @@ func runCheck(args []string, writeBaseline bool) error {
 	}
 	switch *format {
 	case "json":
-		if err := report.JSON(os.Stdout, sum); err != nil {
+		if err := report.JSON(w, sum); err != nil {
 			return err
 		}
 	case "github":
-		report.GitHub(os.Stdout, sum)
+		report.GitHub(w, sum)
 	case "text":
-		report.Human(os.Stdout, sum)
+		report.Human(w, sum)
 	default:
 		return fmt.Errorf("unknown format %q (want text, json, or github)", *format)
 	}
 	if !sum.OK {
-		os.Exit(1)
+		return errViolations
 	}
 	return nil
 }
@@ -168,7 +182,7 @@ func loadAndAnalyze(root, cfgPath string) (*config.Config, []scan.File, map[stri
 }
 
 // runGraph prints the aggregated layer dependency graph.
-func runGraph(args []string) error {
+func runGraph(w io.Writer, args []string) error {
 	fs := flag.NewFlagSet("graph", flag.ExitOnError)
 	cfgPath := fs.String("config", "", "config file path")
 	format := fs.String("format", "mermaid", "output format: mermaid | dot")
@@ -189,9 +203,9 @@ func runGraph(args []string) error {
 	edges := rules.LayerEdges(cfg, files, results)
 	switch *format {
 	case "mermaid":
-		report.Mermaid(os.Stdout, cfg.LayerNames(), edges)
+		report.Mermaid(w, cfg.LayerNames(), edges)
 	case "dot":
-		report.Dot(os.Stdout, cfg.LayerNames(), edges)
+		report.Dot(w, cfg.LayerNames(), edges)
 	default:
 		return fmt.Errorf("unknown format %q (want mermaid or dot)", *format)
 	}
@@ -200,7 +214,7 @@ func runGraph(args []string) error {
 
 // runRules prints every rule applicable to a file, for querying the
 // architecture before writing code (the primary consumer is AI agents).
-func runRules(args []string) error {
+func runRules(w io.Writer, args []string) error {
 	fs := flag.NewFlagSet("rules", flag.ExitOnError)
 	cfgPath := fs.String("config", "", "config file path (default: nearest arch.yaml above the file)")
 	if err := fs.Parse(args); err != nil {
@@ -222,7 +236,7 @@ func runRules(args []string) error {
 		return err
 	}
 	rel := filepath.ToSlash(filepath.Clean(target))
-	enc := json.NewEncoder(os.Stdout)
+	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(rules.Explain(cfg, rel))
 }
@@ -248,7 +262,7 @@ func findConfig(dir string) (string, error) {
 }
 
 // runContext prints a Markdown summary of the rules for agent instructions.
-func runContext(args []string) error {
+func runContext(w io.Writer, args []string) error {
 	fs := flag.NewFlagSet("context", flag.ExitOnError)
 	cfgPath := fs.String("config", "", "config file path")
 	if err := fs.Parse(args); err != nil {
@@ -265,7 +279,7 @@ func runContext(args []string) error {
 	if err != nil {
 		return err
 	}
-	report.Context(os.Stdout, cfg)
+	report.Context(w, cfg)
 	return nil
 }
 
@@ -295,7 +309,7 @@ rules:
 # baseline: .lintel-baseline.json
 `
 
-func runInit(args []string) error {
+func runInit(w io.Writer, args []string) error {
 	fs := flag.NewFlagSet("init", flag.ExitOnError)
 	scanTree := fs.Bool("scan", false, "infer layers from the existing tree")
 	if err := fs.Parse(args); err != nil {
@@ -315,6 +329,6 @@ func runInit(args []string) error {
 	if err := os.WriteFile("arch.yaml", []byte(content), 0o644); err != nil {
 		return err
 	}
-	fmt.Println("wrote arch.yaml — edit the layers to match your project, then run: lintel check")
+	fmt.Fprintln(w, "wrote arch.yaml — edit the layers to match your project, then run: lintel check")
 	return nil
 }
