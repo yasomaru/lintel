@@ -119,7 +119,13 @@ metrics:
   - target: "src/**/service/**"
     max-lines: 300
     max-imports: 15
+    max-public-methods: 8   # god-class detector (per class / Go receiver)
     reason: High fan-out is a god-class smell.
+  - target: "src/**"
+    max-function-lines: 80
+    max-params: 5
+    max-nesting-depth: 4
+    reason: Keep functions readable; split when they grow past a screen.
 
 naming:
   - target: "src/hooks/**"
@@ -181,7 +187,7 @@ baseline: .lintel-baseline.json
 | Key | Checks | Typical AI failure it stops |
 |---|---|---|
 | `rules` | layer dependency direction | infra leaking into domain |
-| `metrics` | file size / import fan-out | fat hooks, god services |
+| `metrics` | file/function size, params, nesting, public methods, hook counts | fat hooks, god services |
 | `naming` | file & exported symbol names | convention drift across files |
 | `bans` | forbidden imports / calls per target | I/O sneaking into pure layers |
 | `suppressions` | lint-silencing markers | `@ts-ignore`-ing its way past errors |
@@ -254,7 +260,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: yasomaru/lintel@v0.7.0   # runs: lintel check --format github
+      - uses: yasomaru/lintel@v1.1.0   # runs: lintel check --format github
 ```
 
 With `--format github` (the Action's default), violations appear as inline
@@ -267,7 +273,7 @@ Or as a [pre-commit](https://pre-commit.com) hook:
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/yasomaru/lintel
-    rev: v0.7.0
+    rev: v1.1.0
     hooks:
       - id: lintel
 ```
@@ -387,7 +393,7 @@ Dependency gate manifests: `package.json`, `go.mod`, `requirements.txt`,
 - [x] React metrics (`max-use-state`, `max-use-effect`)
 - [x] `lintel context`: emit a CLAUDE.md-ready summary of the architecture
 - [x] tree-sitter backend (WebAssembly + wazero, cgo-free) for TS/TSX/JS/Go/Python/Java
-- [ ] Deeper structural metrics (`max-public-methods`, `max-method-lines`) on the AST backend
+- [x] Structural metrics on the AST backend (`max-function-lines`, `max-params`, `max-nesting-depth`, `max-public-methods`)
 - [ ] More bundled grammars (Rust, Kotlin, C#, Ruby, PHP)
 
 ## Contributing

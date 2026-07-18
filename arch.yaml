@@ -32,3 +32,10 @@ dependencies:
     - "gopkg.in/yaml.v3"
     - "github.com/tetratelabs/wazero"   # runs the tree-sitter wasm backend
   reason: Keep the dependency footprint minimal; new deps need a config change.
+
+metrics:
+  - target: "**/*.go"
+    max-function-lines: 100
+    max-params: 5
+    max-nesting-depth: 4
+    reason: Keep functions readable; split when they grow past a screen.

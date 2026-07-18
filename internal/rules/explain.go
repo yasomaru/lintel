@@ -56,11 +56,18 @@ func Explain(cfg *config.Config, rel string) *Explanation {
 			continue
 		}
 		var limits []string
-		if m.MaxLines > 0 {
-			limits = append(limits, fmt.Sprintf("max-lines: %d", m.MaxLines))
-		}
-		if m.MaxImports > 0 {
-			limits = append(limits, fmt.Sprintf("max-imports: %d", m.MaxImports))
+		for _, l := range []struct {
+			v    int
+			name string
+		}{
+			{m.MaxLines, "max-lines"}, {m.MaxImports, "max-imports"},
+			{m.MaxFunctionLines, "max-function-lines"}, {m.MaxParams, "max-params"},
+			{m.MaxNestingDepth, "max-nesting-depth"}, {m.MaxPublicMethods, "max-public-methods"},
+			{m.MaxUseState, "max-use-state"}, {m.MaxUseEffect, "max-use-effect"},
+		} {
+			if l.v > 0 {
+				limits = append(limits, fmt.Sprintf("%s: %d", l.name, l.v))
+			}
 		}
 		e.Metrics = append(e.Metrics, RuleInfo{Rule: strings.Join(limits, ", "), Reason: m.Reason})
 	}

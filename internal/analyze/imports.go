@@ -36,6 +36,10 @@ type Result struct {
 	Exports []Symbol
 	// Hits are occurrences of the project's forbidden text patterns.
 	Hits []PatternHit
+	// Funcs and Classes power structural metrics. They are only
+	// populated by the AST engine.
+	Funcs   []FuncInfo
+	Classes []ClassInfo
 }
 
 // Project carries context needed to resolve imports to project files.
@@ -140,10 +144,12 @@ func (p *Project) fileWith(rel string, eng *engine) (*Result, error) {
 
 	if eng != nil {
 		if al, ok := astLangs[ext]; ok {
-			raws, syms, err := eng.extract(al, ext, src)
+			facts, err := eng.extract(al, ext, src)
 			if err == nil {
-				res.Imports = p.resolveRaws(rel, ext, raws, src)
-				res.Exports = syms
+				res.Imports = p.resolveRaws(rel, ext, facts.Imports, src)
+				res.Exports = facts.Symbols
+				res.Funcs = facts.Funcs
+				res.Classes = facts.Classes
 				res.Hits = scanPatterns(src, p.Patterns)
 				return res, nil
 			}

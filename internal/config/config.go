@@ -200,6 +200,18 @@ type MetricGroup struct {
 	// occurrence per source line.
 	MaxUseState  int `yaml:"max-use-state"`
 	MaxUseEffect int `yaml:"max-use-effect"`
+	// Structural limits, measured on the syntax tree. They require the
+	// AST engine and are skipped under LINTEL_ENGINE=regex.
+	MaxFunctionLines int `yaml:"max-function-lines"`
+	MaxParams        int `yaml:"max-params"`
+	MaxNestingDepth  int `yaml:"max-nesting-depth"`
+	MaxPublicMethods int `yaml:"max-public-methods"`
+}
+
+// HasLimit reports whether any limit is set on the metric group.
+func (m MetricGroup) HasLimit() bool {
+	return m.MaxLines > 0 || m.MaxImports > 0 || m.MaxUseState > 0 || m.MaxUseEffect > 0 ||
+		m.MaxFunctionLines > 0 || m.MaxParams > 0 || m.MaxNestingDepth > 0 || m.MaxPublicMethods > 0
 }
 
 // StringList accepts either a single YAML string or a list of strings.
@@ -286,8 +298,8 @@ func (c *Config) Validate() error {
 		if len(m.Target) == 0 {
 			return fmt.Errorf("metrics %d: target is required", i+1)
 		}
-		if m.MaxLines == 0 && m.MaxImports == 0 && m.MaxUseState == 0 && m.MaxUseEffect == 0 {
-			return fmt.Errorf("metrics %d: at least one limit (max-lines, max-imports, max-use-state, max-use-effect) is required", i+1)
+		if !m.HasLimit() {
+			return fmt.Errorf("metrics %d: at least one limit (max-lines, max-imports, max-function-lines, max-params, max-nesting-depth, max-public-methods, max-use-state, max-use-effect) is required", i+1)
 		}
 	}
 	for i, n := range c.Naming {

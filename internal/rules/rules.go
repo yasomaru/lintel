@@ -161,58 +161,129 @@ func checkMetrics(cfg *config.Config, f scan.File, res *analyze.Result) []Violat
 		if !scan.Match(m.Target, f.Path) {
 			continue
 		}
-		if m.MaxLines > 0 && res.Lines > m.MaxLines {
-			rule := fmt.Sprintf("max-lines: %d", m.MaxLines)
+		out = append(out, fileSizeViolations(m, f, res)...)
+		out = append(out, funcViolations(m, f, res)...)
+		out = append(out, classViolations(m, f, res)...)
+		out = append(out, hookViolations(m, f, res)...)
+	}
+	return out
+}
+
+// fileSizeViolations checks the whole-file limits.
+func fileSizeViolations(m config.MetricGroup, f scan.File, res *analyze.Result) []Violation {
+	var out []Violation
+	if m.MaxLines > 0 && res.Lines > m.MaxLines {
+		rule := fmt.Sprintf("max-lines: %d", m.MaxLines)
+		out = append(out, Violation{
+			File:     f.Path,
+			Rule:     rule,
+			Detail:   fmt.Sprintf("%d lines (limit %d)", res.Lines, m.MaxLines),
+			Reason:   m.Reason,
+			Severity: severityOf(m.Severity),
+			key:      f.Path + "|" + rule,
+		})
+	}
+	if m.MaxImports > 0 && len(res.Imports) > m.MaxImports {
+		rule := fmt.Sprintf("max-imports: %d", m.MaxImports)
+		out = append(out, Violation{
+			File:     f.Path,
+			Rule:     rule,
+			Detail:   fmt.Sprintf("%d imports (limit %d)", len(res.Imports), m.MaxImports),
+			Reason:   m.Reason,
+			Severity: severityOf(m.Severity),
+			key:      f.Path + "|" + rule,
+		})
+	}
+	return out
+}
+
+// funcViolations checks the per-function structural limits.
+func funcViolations(m config.MetricGroup, f scan.File, res *analyze.Result) []Violation {
+	if m.MaxFunctionLines == 0 && m.MaxParams == 0 && m.MaxNestingDepth == 0 {
+		return nil
+	}
+	var out []Violation
+	for _, fn := range res.Funcs {
+		for _, sm := range []struct {
+			limit int
+			name  string
+			got   int
+			unit  string
+		}{
+			{m.MaxFunctionLines, "max-function-lines", fn.Lines, "lines"},
+			{m.MaxParams, "max-params", fn.Params, "parameters"},
+			{m.MaxNestingDepth, "max-nesting-depth", fn.Depth, "nesting levels"},
+		} {
+			if sm.limit == 0 || sm.got <= sm.limit {
+				continue
+			}
+			rule := fmt.Sprintf("%s: %d", sm.name, sm.limit)
 			out = append(out, Violation{
-				File:     f.Path,
+				File: f.Path, Line: fn.Line,
 				Rule:     rule,
-				Detail:   fmt.Sprintf("%d lines (limit %d)", res.Lines, m.MaxLines),
+				Detail:   fmt.Sprintf("%s: %d %s (limit %d)", fn.Name, sm.got, sm.unit, sm.limit),
 				Reason:   m.Reason,
 				Severity: severityOf(m.Severity),
-				// The detail carries the current count; keep the baseline
-				// fingerprint stable across edits.
-				key: f.Path + "|" + rule,
+				key:      f.Path + "|" + rule + "|" + fn.Name,
 			})
 		}
-		if m.MaxImports > 0 && len(res.Imports) > m.MaxImports {
-			rule := fmt.Sprintf("max-imports: %d", m.MaxImports)
+	}
+	return out
+}
+
+// classViolations checks the per-class structural limits.
+func classViolations(m config.MetricGroup, f scan.File, res *analyze.Result) []Violation {
+	if m.MaxPublicMethods == 0 {
+		return nil
+	}
+	var out []Violation
+	for _, c := range res.Classes {
+		if c.PublicMethods <= m.MaxPublicMethods {
+			continue
+		}
+		rule := fmt.Sprintf("max-public-methods: %d", m.MaxPublicMethods)
+		out = append(out, Violation{
+			File: f.Path, Line: c.Line,
+			Rule:     rule,
+			Detail:   fmt.Sprintf("%s: %d public methods (limit %d)", c.Name, c.PublicMethods, m.MaxPublicMethods),
+			Reason:   m.Reason,
+			Severity: severityOf(m.Severity),
+			key:      f.Path + "|" + rule + "|" + c.Name,
+		})
+	}
+	return out
+}
+
+// hookViolations checks the React hook-count limits.
+func hookViolations(m config.MetricGroup, f scan.File, res *analyze.Result) []Violation {
+	var out []Violation
+	for _, hm := range []struct {
+		limit   int
+		name    string
+		pattern string
+	}{
+		{m.MaxUseState, "max-use-state", useStatePattern},
+		{m.MaxUseEffect, "max-use-effect", useEffectPattern},
+	} {
+		if hm.limit == 0 {
+			continue
+		}
+		n := 0
+		for _, hit := range res.Hits {
+			if hit.Pattern == hm.pattern {
+				n++
+			}
+		}
+		if n > hm.limit {
+			rule := fmt.Sprintf("%s: %d", hm.name, hm.limit)
 			out = append(out, Violation{
 				File:     f.Path,
 				Rule:     rule,
-				Detail:   fmt.Sprintf("%d imports (limit %d)", len(res.Imports), m.MaxImports),
+				Detail:   fmt.Sprintf("%d %s calls (limit %d)", n, strings.TrimSuffix(hm.pattern, "("), hm.limit),
 				Reason:   m.Reason,
 				Severity: severityOf(m.Severity),
 				key:      f.Path + "|" + rule,
 			})
-		}
-		for _, hm := range []struct {
-			limit   int
-			name    string
-			pattern string
-		}{
-			{m.MaxUseState, "max-use-state", useStatePattern},
-			{m.MaxUseEffect, "max-use-effect", useEffectPattern},
-		} {
-			if hm.limit == 0 {
-				continue
-			}
-			n := 0
-			for _, hit := range res.Hits {
-				if hit.Pattern == hm.pattern {
-					n++
-				}
-			}
-			if n > hm.limit {
-				rule := fmt.Sprintf("%s: %d", hm.name, hm.limit)
-				out = append(out, Violation{
-					File:     f.Path,
-					Rule:     rule,
-					Detail:   fmt.Sprintf("%d %s calls (limit %d)", n, strings.TrimSuffix(hm.pattern, "("), hm.limit),
-					Reason:   m.Reason,
-					Severity: severityOf(m.Severity),
-					key:      f.Path + "|" + rule,
-				})
-			}
 		}
 	}
 	return out

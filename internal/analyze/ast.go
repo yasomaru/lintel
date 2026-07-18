@@ -113,6 +113,11 @@ type grammarState struct {
 	parser   sitter.Parser
 	query    sitter.Query
 	capNames map[uint32]string
+
+	// Metrics query, combined from the patterns the grammar accepted.
+	hasMetrics bool
+	mQuery     sitter.Query
+	mCapNames  map[uint32]string
 }
 
 var enginePool = sync.Pool{}
@@ -160,8 +165,38 @@ func (e *engine) forGrammar(al astLang) (*grammarState, error) {
 		return nil, fmt.Errorf("query for %s: %w", al.grammar, err)
 	}
 	g := &grammarState{parser: parser, query: query, capNames: map[uint32]string{}}
+
+	// Metrics patterns are compiled individually so that one pattern a
+	// grammar version rejects doesn't disable the others; survivors are
+	// recombined into a single query.
+	var accepted []string
+	for _, pat := range metricsPatterns[al.grammar] {
+		if q, err := e.ts.NewQuery(e.ctx, pat, lang); err == nil {
+			q.Close(e.ctx)
+			accepted = append(accepted, pat)
+		}
+	}
+	if len(accepted) > 0 {
+		if mq, err := e.ts.NewQuery(e.ctx, strings.Join(accepted, "\n"), lang); err == nil {
+			g.hasMetrics = true
+			g.mQuery = mq
+			g.mCapNames = map[uint32]string{}
+		}
+	}
 	e.grammars[al.grammar] = g
 	return g, nil
+}
+
+func (g *grammarState) mCaptureName(ctx context.Context, id uint32) (string, error) {
+	if n, ok := g.mCapNames[id]; ok {
+		return n, nil
+	}
+	n, err := g.mQuery.CaptureNameForID(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	g.mCapNames[id] = n
+	return n, nil
 }
 
 func (g *grammarState) captureName(ctx context.Context, id uint32) (string, error) {
@@ -181,38 +216,46 @@ type capture struct {
 	start int
 }
 
-// extract parses src and returns raw imports and exported symbols.
-func (e *engine) extract(al astLang, ext, src string) ([]rawImport, []Symbol, error) {
+// astFacts is everything the engine extracts from one parse.
+type astFacts struct {
+	Imports []rawImport
+	Symbols []Symbol
+	Funcs   []FuncInfo
+	Classes []ClassInfo
+}
+
+// extract parses src once and runs both the facts query (imports and
+// exported symbols) and the metrics query (functions and classes).
+func (e *engine) extract(al astLang, ext, src string) (*astFacts, error) {
 	ctx := e.ctx
 	g, err := e.forGrammar(al)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	tree, err := g.parser.ParseString(ctx, src)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	defer tree.Close(ctx)
 	root, err := tree.RootNode(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	defer root.Free(ctx)
 	qc, err := e.ts.NewQueryCursor(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	defer qc.Close(ctx)
 	if err := qc.Exec(ctx, g.query, root); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	var imports []rawImport
-	var symbols []Symbol
+	facts := &astFacts{}
 	for {
 		m, ok, err := qc.NextMatch(ctx)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		if !ok {
 			break
@@ -231,13 +274,18 @@ func (e *engine) extract(al astLang, ext, src string) ([]rawImport, []Symbol, er
 			caps[name] = capture{text: src[start:end], start: int(start)}
 		}
 		m.Free(ctx)
-		routeMatch(caps, ext, &imports, &symbols)
+		routeMatch(caps, ext, &facts.Imports, &facts.Symbols)
 	}
 	// Symbols carried byte offsets so far; convert them to line numbers.
-	for i := range symbols {
-		symbols[i].Line = lineAt(src, symbols[i].Line)
+	for i := range facts.Symbols {
+		facts.Symbols[i].Line = lineAt(src, facts.Symbols[i].Line)
 	}
-	return imports, symbols, nil
+
+	facts.Funcs, facts.Classes, err = e.structures(g, root, ext, src)
+	if err != nil {
+		return nil, err
+	}
+	return facts, nil
 }
 
 // routeMatch turns one query match into imports or symbols.

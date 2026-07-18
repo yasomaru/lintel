@@ -74,6 +74,10 @@
         "anyOf": [
           { "required": ["max-lines"] },
           { "required": ["max-imports"] },
+          { "required": ["max-function-lines"] },
+          { "required": ["max-params"] },
+          { "required": ["max-nesting-depth"] },
+          { "required": ["max-public-methods"] },
           { "required": ["max-use-state"] },
           { "required": ["max-use-effect"] }
         ],
@@ -81,6 +85,10 @@
           "target": { "$ref": "#/$defs/stringList", "description": "Glob pattern(s) selecting the files to measure." },
           "max-lines": { "type": "integer", "minimum": 1, "description": "Maximum lines per file." },
           "max-imports": { "type": "integer", "minimum": 1, "description": "Maximum import declarations per file (fan-out)." },
+          "max-function-lines": { "type": "integer", "minimum": 1, "description": "Maximum lines per function/method (AST engine)." },
+          "max-params": { "type": "integer", "minimum": 1, "description": "Maximum parameters per function/method (AST engine)." },
+          "max-nesting-depth": { "type": "integer", "minimum": 1, "description": "Maximum block nesting inside a function (AST engine)." },
+          "max-public-methods": { "type": "integer", "minimum": 1, "description": "Maximum public methods per class (AST engine)." },
           "max-use-state": { "type": "integer", "minimum": 1, "description": "React: maximum useState( calls per file." },
           "max-use-effect": { "type": "integer", "minimum": 1, "description": "React: maximum useEffect( calls per file." },
           "reason": { "type": "string" },

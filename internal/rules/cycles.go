@@ -103,15 +103,7 @@ func tarjanSCCs(adj map[string][]string) [][]string {
 			}
 			if low[n] == index[n] {
 				var scc []string
-				for {
-					m := stack[len(stack)-1]
-					stack = stack[:len(stack)-1]
-					onStack[m] = false
-					scc = append(scc, m)
-					if m == n {
-						break
-					}
-				}
+				scc, stack = popSCC(stack, onStack, n)
 				sccs = append(sccs, scc)
 			}
 			call = call[:len(call)-1]
@@ -124,6 +116,19 @@ func tarjanSCCs(adj map[string][]string) [][]string {
 		}
 	}
 	return sccs
+}
+
+// popSCC pops one strongly connected component off the Tarjan stack.
+func popSCC(stack []string, onStack map[string]bool, root string) (scc, rest []string) {
+	for {
+		m := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		onStack[m] = false
+		scc = append(scc, m)
+		if m == root {
+			return scc, stack
+		}
+	}
 }
 
 // checkEncapsulation flags imports that reach into a layer's internals
