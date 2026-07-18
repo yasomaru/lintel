@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/yasomaru/lintel/internal/rules"
 )
@@ -27,24 +28,49 @@ func JSON(w io.Writer, s Summary) error {
 	return enc.Encode(s)
 }
 
+// ANSI styles, emptied when the writer is not a terminal or NO_COLOR is set.
+type palette struct {
+	red, green, yellow, dim, bold, reset string
+}
+
+func styles(w io.Writer) palette {
+	if os.Getenv("NO_COLOR") != "" {
+		return palette{}
+	}
+	f, ok := w.(*os.File)
+	if !ok {
+		return palette{}
+	}
+	if fi, err := f.Stat(); err != nil || fi.Mode()&os.ModeCharDevice == 0 {
+		return palette{}
+	}
+	return palette{
+		red: "\x1b[31m", green: "\x1b[32m", yellow: "\x1b[33m",
+		dim: "\x1b[2m", bold: "\x1b[1m", reset: "\x1b[0m",
+	}
+}
+
 // Human writes a human-readable report.
 func Human(w io.Writer, s Summary) {
+	p := styles(w)
 	for _, v := range s.Violations {
 		loc := v.File
 		if v.Line > 0 {
 			loc = fmt.Sprintf("%s:%d", v.File, v.Line)
 		}
-		fmt.Fprintf(w, "✗ %s\n    rule: %s\n    %s\n", loc, v.Rule, v.Detail)
+		fmt.Fprintf(w, "%s✗%s %s%s%s\n", p.red, p.reset, p.bold, loc, p.reset)
+		fmt.Fprintf(w, "    rule: %s%s%s\n", p.yellow, v.Rule, p.reset)
+		fmt.Fprintf(w, "    %s\n", v.Detail)
 		if v.Reason != "" {
-			fmt.Fprintf(w, "    why:  %s\n", v.Reason)
+			fmt.Fprintf(w, "    %swhy:  %s%s\n", p.dim, v.Reason, p.reset)
 		}
 	}
 	if len(s.Violations) > 0 {
 		fmt.Fprintln(w)
 	}
-	status := "ok"
+	status := p.green + "ok" + p.reset
 	if !s.OK {
-		status = "failed"
+		status = p.red + "failed" + p.reset
 	}
 	fmt.Fprintf(w, "%s: %d file(s) checked, %d violation(s)", status, s.Files, len(s.Violations))
 	if s.Baselined > 0 {

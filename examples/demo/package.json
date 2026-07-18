@@ -1,0 +1,7 @@
+{
+  "name": "lintel-demo",
+  "private": true,
+  "dependencies": {
+    "moment": "^2.30.0"
+  }
+}

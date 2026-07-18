@@ -1,0 +1,37 @@
+# Demo project showing what lintel catches. Try: lintel check examples/demo
+layers:
+  domain:
+    path: "src/domain/**"
+    description: Business logic. No I/O, no framework code.
+  hooks:
+    path: "src/hooks/**"
+
+rules:
+  - deny: domain -> "*"
+    reason: The domain layer must not depend on any other layer.
+
+naming:
+  - target: "src/hooks/**"
+    file-pattern: "use[A-Z]*.ts"
+    reason: Hooks must be named useXxx.
+
+bans:
+  - target: "src/domain/**"
+    imports: ["axios"]
+    reason: The domain layer performs no I/O. Go through a repository.
+
+suppressions:
+  deny: ["@ts-ignore"]
+  reason: Fix the root cause instead of suppressing.
+
+placeholders:
+  deny: ["TODO: implement"]
+  reason: Unfinished code must not merge.
+
+coverage:
+  require-layer: true
+  reason: Every file belongs to a declared layer.
+
+dependencies:
+  deny: ["moment"]
+  reason: Use date-fns instead.

@@ -15,18 +15,10 @@ dependencies.
 > structure above it. This tool does the same for your codebase: it is the
 > `lint` that holds your architecture up.
 
-```console
-$ lintel check
-✗ src/domain/user.ts:1
-    rule: bans: import axios
-    import "axios" is banned here
-    why:  The domain layer performs no I/O. Go through a repository.
-✗ src/hooks/helpers.ts
-    rule: naming: file-pattern use[A-Z]*.ts
-    file name "helpers.ts" does not match "use[A-Z]*.ts"
+![lintel check demo](docs/demo.gif)
 
-failed: 214 file(s) checked, 2 violation(s)
-```
+*The demo project lives in [`examples/demo`](examples/demo) — try it yourself
+with `lintel check examples/demo`.*
 
 ## Why lintel?
 
