@@ -3,7 +3,7 @@
 [![CI](https://github.com/yasomaru/lintel/actions/workflows/ci.yml/badge.svg)](https://github.com/yasomaru/lintel/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/yasomaru/lintel)](https://github.com/yasomaru/lintel/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/yasomaru/lintel/total?label=downloads)](https://github.com/yasomaru/lintel/releases)
-[![Go Report Card](https://goreportcard.com/badge/github.com/yasomaru/lintel)](https://goreportcard.com/report/github.com/yasomaru/lintel)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/yasomaru/lintel)](go.mod)
 [![License: MIT](https://img.shields.io/github/license/yasomaru/lintel)](LICENSE)
 
 **Architecture lint for any language.** Declare your layers and rules in one
