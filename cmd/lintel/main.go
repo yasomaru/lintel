@@ -15,12 +15,16 @@ import (
 	"github.com/yasomaru/lintel/internal/scan"
 )
 
+// version is set by goreleaser at release time.
+var version = "dev"
+
 const usage = `lintel — architecture lint for any language
 
 Usage:
   lintel check [path]      check the project against arch.yaml
   lintel baseline [path]   record current violations as the baseline
   lintel init              write a starter arch.yaml
+  lintel version           print the version
 
 Flags for check:
   --config <file>   config file (default: arch.yaml under the target path)
@@ -40,6 +44,8 @@ func main() {
 		err = runCheck(os.Args[2:], true)
 	case "init":
 		err = runInit()
+	case "version", "--version", "-v":
+		fmt.Println("lintel", version)
 	case "help", "--help", "-h":
 		fmt.Print(usage)
 	default:
