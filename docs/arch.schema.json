@@ -1,0 +1,203 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/yasomaru/lintel/main/docs/arch.schema.json",
+  "title": "lintel arch.yaml",
+  "description": "Architecture rules enforced by lintel. https://github.com/yasomaru/lintel",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["layers"],
+  "$defs": {
+    "stringList": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+      ]
+    }
+  },
+  "properties": {
+    "layers": {
+      "type": "object",
+      "description": "Named groups of files, defined by glob patterns. If a file matches several layers, the longest pattern wins.",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path"],
+        "properties": {
+          "path": {
+            "$ref": "#/$defs/stringList",
+            "description": "Glob pattern(s) relative to the root, e.g. \"src/domain/**\"."
+          },
+          "description": {
+            "type": "string",
+            "description": "The layer's responsibility. Carried into error messages and JSON output."
+          }
+        }
+      }
+    },
+    "rules": {
+      "type": "array",
+      "description": "Dependency rules between layers. Deny wins over allow; \"*\" matches any layer.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "allow": {
+            "type": "string",
+            "description": "Permitted dependency, arrow notation: \"ui -> usecase\"."
+          },
+          "deny": {
+            "type": "string",
+            "description": "Forbidden dependency, arrow notation: \"domain -> *\"."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why this rule exists. Shown to humans and AI agents on violation."
+          }
+        },
+        "oneOf": [{ "required": ["allow"] }, { "required": ["deny"] }]
+      }
+    },
+    "metrics": {
+      "type": "array",
+      "description": "Size limits that catch fat modules before they grow.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["target"],
+        "anyOf": [{ "required": ["max-lines"] }, { "required": ["max-imports"] }],
+        "properties": {
+          "target": { "$ref": "#/$defs/stringList", "description": "Glob pattern(s) selecting the files to measure." },
+          "max-lines": { "type": "integer", "minimum": 1, "description": "Maximum lines per file." },
+          "max-imports": { "type": "integer", "minimum": 1, "description": "Maximum import declarations per file (fan-out)." },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "naming": {
+      "type": "array",
+      "description": "File and exported-symbol naming conventions.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["target"],
+        "anyOf": [{ "required": ["file-pattern"] }, { "required": ["symbol-pattern"] }],
+        "properties": {
+          "target": { "$ref": "#/$defs/stringList" },
+          "file-pattern": { "type": "string", "description": "Glob the file's base name must match, e.g. \"use[A-Z]*.ts\"." },
+          "symbol-pattern": { "type": "string", "description": "Glob every exported top-level symbol must match, e.g. \"*Repository\"." },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "bans": {
+      "type": "array",
+      "description": "Forbidden imports or calls inside matched files.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["target"],
+        "anyOf": [{ "required": ["imports"] }, { "required": ["calls"] }],
+        "properties": {
+          "target": { "$ref": "#/$defs/stringList" },
+          "imports": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Globs matched against the raw import specifier, e.g. \"@prisma/*\"."
+          },
+          "calls": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Substrings that must not appear, e.g. \"console.log\"."
+          },
+          "except": { "$ref": "#/$defs/stringList", "description": "Paths excluded from this ban." },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "suppressions": {
+      "type": "object",
+      "description": "Forbidden lint-silencing markers (@ts-ignore, eslint-disable, ...).",
+      "additionalProperties": false,
+      "required": ["deny"],
+      "properties": {
+        "deny": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "except": { "$ref": "#/$defs/stringList" },
+        "reason": { "type": "string" }
+      }
+    },
+    "placeholders": {
+      "type": "object",
+      "description": "Forbidden unfinished-code markers (TODO: implement, ...).",
+      "additionalProperties": false,
+      "required": ["deny"],
+      "properties": {
+        "deny": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "except": { "$ref": "#/$defs/stringList" },
+        "reason": { "type": "string" }
+      }
+    },
+    "dependencies": {
+      "type": "object",
+      "description": "Gate for external packages in package.json / go.mod / requirements.txt. Deny always wins.",
+      "additionalProperties": false,
+      "properties": {
+        "policy": {
+          "type": "string",
+          "enum": ["allowlist", "denylist"],
+          "description": "allowlist: every dependency must match an allow pattern. Default: denylist."
+        },
+        "allow": { "type": "array", "items": { "type": "string" } },
+        "deny": { "type": "array", "items": { "type": "string" } },
+        "reason": { "type": "string" }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "description": "Require every source file to belong to a declared layer.",
+      "additionalProperties": false,
+      "properties": {
+        "require-layer": { "type": "boolean" },
+        "except": { "$ref": "#/$defs/stringList" },
+        "reason": { "type": "string" }
+      }
+    },
+    "pairing": {
+      "type": "array",
+      "description": "Require companion files to exist, e.g. a test per use case.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["target", "requires"],
+        "properties": {
+          "target": { "$ref": "#/$defs/stringList" },
+          "requires": {
+            "type": "string",
+            "description": "Glob a companion file must match; {name} expands to the file's base name without extension."
+          },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "resolve": {
+      "type": "object",
+      "description": "Import resolution tuning.",
+      "additionalProperties": false,
+      "properties": {
+        "aliases": {
+          "type": "object",
+          "description": "Import aliases, tsconfig-style: \"@/*\": \"src/*\". Merged with tsconfig.json paths; these win.",
+          "additionalProperties": { "$ref": "#/$defs/stringList" }
+        }
+      }
+    },
+    "baseline": {
+      "type": "string",
+      "description": "Path to a JSON file holding grandfathered violations (see: lintel baseline)."
+    },
+    "strict": {
+      "type": "boolean",
+      "description": "Make undeclared dependencies between layers a violation."
+    }
+  }
+}

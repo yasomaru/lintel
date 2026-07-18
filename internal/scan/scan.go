@@ -34,7 +34,21 @@ var skipDirs = map[string]bool{
 
 // Walk returns all supported source files under root with their layer.
 func Walk(root string, cfg *config.Config) ([]File, error) {
-	var files []File
+	rels, err := List(root)
+	if err != nil {
+		return nil, err
+	}
+	files := make([]File, len(rels))
+	for i, rel := range rels {
+		files[i] = File{Path: rel, Layer: LayerOf(rel, cfg)}
+	}
+	return files, nil
+}
+
+// List returns the slash-relative paths of all supported source files
+// under root, without layer assignment.
+func List(root string) ([]string, error) {
+	var rels []string
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -52,11 +66,10 @@ func Walk(root string, cfg *config.Config) ([]File, error) {
 		if err != nil {
 			return err
 		}
-		rel = filepath.ToSlash(rel)
-		files = append(files, File{Path: rel, Layer: LayerOf(rel, cfg)})
+		rels = append(rels, filepath.ToSlash(rel))
 		return nil
 	})
-	return files, err
+	return rels, err
 }
 
 // LayerOf returns the layer a path belongs to, or "" if none matches.

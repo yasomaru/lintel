@@ -12,6 +12,7 @@ import (
 	"github.com/yasomaru/lintel/internal/config"
 	"github.com/yasomaru/lintel/internal/report"
 	"github.com/yasomaru/lintel/internal/rules"
+	"github.com/yasomaru/lintel/internal/scaffold"
 	"github.com/yasomaru/lintel/internal/scan"
 )
 
@@ -23,7 +24,8 @@ const usage = `lintel — architecture lint for any language
 Usage:
   lintel check [path]      check the project against arch.yaml
   lintel baseline [path]   record current violations as the baseline
-  lintel init              write a starter arch.yaml
+  lintel init [--scan]     write a starter arch.yaml (--scan infers layers)
+  lintel schema            print the JSON Schema for arch.yaml
   lintel version           print the version
 
 Flags for check:
@@ -43,7 +45,9 @@ func main() {
 	case "baseline":
 		err = runCheck(os.Args[2:], true)
 	case "init":
-		err = runInit()
+		err = runInit(os.Args[2:])
+	case "schema":
+		_, err = os.Stdout.Write(config.SchemaJSON)
 	case "version", "--version", "-v":
 		fmt.Println("lintel", version)
 	case "help", "--help", "-h":
@@ -142,7 +146,8 @@ func runCheck(args []string, writeBaseline bool) error {
 	return nil
 }
 
-const starterConfig = `# arch.yaml — architecture rules checked by lintel
+const starterConfig = `# yaml-language-server: $schema=https://raw.githubusercontent.com/yasomaru/lintel/main/docs/arch.schema.json
+# arch.yaml — architecture rules checked by lintel
 # Layers are named groups of files; rules constrain dependencies between them.
 
 layers:
@@ -167,11 +172,24 @@ rules:
 # baseline: .lintel-baseline.json
 `
 
-func runInit() error {
+func runInit(args []string) error {
+	fs := flag.NewFlagSet("init", flag.ExitOnError)
+	scanTree := fs.Bool("scan", false, "infer layers from the existing tree")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
 	if _, err := os.Stat("arch.yaml"); err == nil {
 		return fmt.Errorf("arch.yaml already exists")
 	}
-	if err := os.WriteFile("arch.yaml", []byte(starterConfig), 0o644); err != nil {
+	content := starterConfig
+	if *scanTree {
+		generated, err := scaffold.Generate(".")
+		if err != nil {
+			return err
+		}
+		content = generated
+	}
+	if err := os.WriteFile("arch.yaml", []byte(content), 0o644); err != nil {
 		return err
 	}
 	fmt.Println("wrote arch.yaml — edit the layers to match your project, then run: lintel check")

@@ -67,11 +67,16 @@ go install github.com/yasomaru/lintel/cmd/lintel@latest
 ## Quick start
 
 ```console
-$ lintel init                  # write a starter arch.yaml
+$ lintel init --scan           # infer layers from your tree, write arch.yaml
 $ lintel check                 # check the current directory
 $ lintel check --format json   # structured output for CI / AI agents
 $ lintel baseline              # grandfather existing violations
 ```
+
+`init --scan` walks your tree, recognizes conventional layer directories
+(`domain`, `usecase`, `infra`, `hooks`, `components`, ...), and writes a
+proposed `arch.yaml` — including a `deny: domain -> "*"` rule when it finds
+a domain layer. Plain `lintel init` writes a minimal template instead.
 
 ## Configuration
 
@@ -175,6 +180,19 @@ baseline: .lintel-baseline.json
 5. `description` and `reason` are not comments — they are carried into error
    messages and JSON output, so humans and AI agents see *why* a rule exists.
 
+### Editor completion
+
+`arch.yaml` has a published [JSON Schema](docs/arch.schema.json). Generated
+configs include a modeline that the VS Code YAML extension (and any
+yaml-language-server editor) picks up for completion and validation:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/yasomaru/lintel/main/docs/arch.schema.json
+```
+
+`lintel schema` prints the same schema for offline use — or for handing to
+an AI agent as the contract when asking it to write or edit your rules.
+
 ## Using in CI
 
 `lintel check` exits with code 1 on violations — that's all CI needs:
@@ -269,10 +287,10 @@ engine.
 
 - [x] TS path aliases (`@/...`) and Python relative imports
 - [x] `--format github` for PR line annotations
+- [x] JSON Schema for `arch.yaml` (editor completion, AI generation)
+- [x] `lintel init --scan`: infer a starter config from the existing tree
 - [ ] tree-sitter backend + language packs (replaces v0's regex extraction)
 - [ ] Framework-aware metrics (`max-use-state`, `max-public-methods`, ...)
-- [ ] JSON Schema for `arch.yaml` (editor completion, AI generation)
-- [ ] `lintel init --scan`: infer a starter config from the existing tree
 - [ ] MCP server mode: let AI agents query the rules *before* writing code
 
 ## Contributing

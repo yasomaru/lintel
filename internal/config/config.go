@@ -4,6 +4,7 @@
 package config
 
 import (
+	_ "embed"
 	"fmt"
 	"os"
 	"sort"
@@ -11,6 +12,13 @@ import (
 
 	"gopkg.in/yaml.v3"
 )
+
+// SchemaJSON is the JSON Schema for arch.yaml, embedded so that
+// `lintel schema` works offline. docs/arch.schema.json is a published
+// copy kept in sync by a test.
+//
+//go:embed arch.schema.json
+var SchemaJSON []byte
 
 // Config is the root of arch.yaml.
 type Config struct {
