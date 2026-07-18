@@ -1,7 +1,7 @@
 # lintel
 
 [![CI](https://github.com/yasomaru/lintel/actions/workflows/ci.yml/badge.svg)](https://github.com/yasomaru/lintel/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fyasomaru%2Flintel%2Fbadges%2Fcoverage.json)](https://github.com/yasomaru/lintel/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fyasomaru%2Flintel%2Fbadges%2Fcoverage.json%3Fv%3D1)](https://github.com/yasomaru/lintel/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/yasomaru/lintel)](https://github.com/yasomaru/lintel/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/yasomaru/lintel/total?label=downloads)](https://github.com/yasomaru/lintel/releases)
 [![Go Reference](https://pkg.go.dev/badge/github.com/yasomaru/lintel.svg)](https://pkg.go.dev/github.com/yasomaru/lintel)
