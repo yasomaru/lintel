@@ -17,6 +17,10 @@ coverage:
   except: "examples/**"
   reason: Every source file must live inside a declared layer.
 
+cycles:
+  deny: true
+  reason: Circular dependencies make packages inseparable.
+
 suppressions:
   deny: ["//nolint"]
   reason: Fix the root cause instead of silencing the linter.

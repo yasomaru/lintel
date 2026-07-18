@@ -63,8 +63,12 @@ func GitHub(w io.Writer, s Summary) {
 		if v.Reason != "" {
 			msg += " — " + v.Reason
 		}
-		fmt.Fprintf(w, "::error file=%s,line=%d,title=%s::%s\n",
-			v.File, line, escapeProperty("lintel: "+v.Rule), escapeData(msg))
+		kind := "error"
+		if v.Severity == "warn" {
+			kind = "warning"
+		}
+		fmt.Fprintf(w, "::%s file=%s,line=%d,title=%s::%s\n",
+			kind, v.File, line, escapeProperty("lintel: "+v.Rule), escapeData(msg))
 	}
 	fmt.Fprintf(w, "%d file(s) checked, %d violation(s)\n", s.Files, len(s.Violations))
 }
@@ -78,12 +82,18 @@ func escapeProperty(s string) string { return propEscaper.Replace(s) }
 // Human writes a human-readable report.
 func Human(w io.Writer, s Summary) {
 	p := styles(w)
+	warns := 0
 	for _, v := range s.Violations {
 		loc := v.File
 		if v.Line > 0 {
 			loc = fmt.Sprintf("%s:%d", v.File, v.Line)
 		}
-		fmt.Fprintf(w, "%s✗%s %s%s%s\n", p.red, p.reset, p.bold, loc, p.reset)
+		icon := p.red + "✗" + p.reset
+		if v.Severity == "warn" {
+			icon = p.yellow + "⚠" + p.reset
+			warns++
+		}
+		fmt.Fprintf(w, "%s %s%s%s\n", icon, p.bold, loc, p.reset)
 		fmt.Fprintf(w, "    rule: %s%s%s\n", p.yellow, v.Rule, p.reset)
 		fmt.Fprintf(w, "    %s\n", v.Detail)
 		if v.Reason != "" {
@@ -98,6 +108,9 @@ func Human(w io.Writer, s Summary) {
 		status = p.red + "failed" + p.reset
 	}
 	fmt.Fprintf(w, "%s: %d file(s) checked, %d violation(s)", status, s.Files, len(s.Violations))
+	if warns > 0 {
+		fmt.Fprintf(w, " (%d warning(s))", warns)
+	}
 	if s.Baselined > 0 {
 		fmt.Fprintf(w, ", %d baselined", s.Baselined)
 	}

@@ -130,7 +130,8 @@ func runCheck(args []string, writeBaseline bool) error {
 		Violations: violations,
 		Baselined:  len(baselined),
 		Files:      len(files),
-		OK:         len(violations) == 0,
+		// Warn-severity violations are reported but don't fail the check.
+		OK: rules.CountErrors(violations) == 0,
 	}
 	switch *format {
 	case "json":

@@ -1,0 +1,117 @@
+package rules
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestCycleDetection(t *testing.T) {
+	cfg := `
+layers:
+  app:
+    path: "src/**"
+cycles:
+  deny: true
+  reason: break the loop
+`
+	vs := project(t, cfg, map[string]string{
+		"src/a.ts": `import { b } from "./b";`,
+		"src/b.ts": `import { c } from "./c";`,
+		"src/c.ts": `import { a } from "./a"; export const c = 1;`,
+		"src/d.ts": `import { a } from "./a"; export const d = 1;`, // not in the cycle
+	})
+	if len(vs) != 1 {
+		t.Fatalf("violations = %d, want 1: %+v", len(vs), vs)
+	}
+	v := vs[0]
+	if !strings.Contains(v.Rule, "cycles") || !strings.Contains(v.Detail, "3 files") {
+		t.Errorf("wrong cycle violation: %+v", v)
+	}
+	for _, f := range []string{"src/a.ts", "src/b.ts", "src/c.ts"} {
+		if !strings.Contains(v.Detail, f) {
+			t.Errorf("cycle member %s missing from detail: %s", f, v.Detail)
+		}
+	}
+	if strings.Contains(v.Detail, "src/d.ts") {
+		t.Errorf("d.ts is not part of the cycle: %s", v.Detail)
+	}
+}
+
+func TestNoCycleNoViolation(t *testing.T) {
+	cfg := `
+layers:
+  app:
+    path: "src/**"
+cycles:
+  deny: true
+`
+	vs := project(t, cfg, map[string]string{
+		"src/a.ts": `import { b } from "./b";`,
+		"src/b.ts": `export const b = 1;`,
+	})
+	if len(vs) != 0 {
+		t.Fatalf("violations = %d, want 0: %+v", len(vs), vs)
+	}
+}
+
+func TestEncapsulation(t *testing.T) {
+	cfg := `
+layers:
+  domain:
+    path: "src/domain/**"
+  ui:
+    path: "src/ui/**"
+encapsulation:
+  - layer: domain
+    entry: "src/domain/index.ts"
+    reason: internals are private
+`
+	vs := project(t, cfg, map[string]string{
+		"src/domain/index.ts":    `export * from "./user";`,
+		"src/domain/user.ts":     `export const u = 1;`,
+		"src/ui/good.ts":         `import { u } from "../domain/index";`,
+		"src/ui/bad.ts":          `import { u } from "../domain/user";`,
+		"src/domain/internal.ts": `import { u } from "./user"; export const i = u;`, // same layer: free
+	})
+	if len(vs) != 1 {
+		t.Fatalf("violations = %d, want 1: %+v", len(vs), vs)
+	}
+	v := vs[0]
+	if v.File != "src/ui/bad.ts" || !strings.Contains(v.Rule, "encapsulation") {
+		t.Errorf("wrong violation: %+v", v)
+	}
+	if !strings.Contains(v.Detail, "src/domain/index.ts") {
+		t.Errorf("detail should point at the entry file: %s", v.Detail)
+	}
+}
+
+func TestSeverityWarn(t *testing.T) {
+	cfg := `
+layers:
+  app:
+    path: "src/**"
+metrics:
+  - target: "src/**"
+    max-lines: 1
+    severity: warn
+bans:
+  - target: "src/**"
+    imports: ["axios"]
+`
+	vs := project(t, cfg, map[string]string{
+		"src/a.ts": `import axios from "axios";` + "\n" + `export const a = 1;`,
+	})
+	if len(vs) != 2 {
+		t.Fatalf("violations = %d, want 2: %+v", len(vs), vs)
+	}
+	bySeverity := map[string]int{}
+	for _, v := range vs {
+		bySeverity[v.Severity]++
+	}
+	if bySeverity["warn"] != 1 || bySeverity["error"] != 1 {
+		t.Errorf("severities wrong: %+v", vs)
+	}
+	if CountErrors(vs) != 1 {
+		t.Errorf("CountErrors = %d, want 1", CountErrors(vs))
+	}
+}

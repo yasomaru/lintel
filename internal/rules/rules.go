@@ -18,6 +18,27 @@ type Violation struct {
 	Rule   string `json:"rule"`
 	Detail string `json:"detail"`
 	Reason string `json:"reason,omitempty"`
+	// Severity is "error" (fails the check) or "warn" (reported only).
+	Severity string `json:"severity"`
+}
+
+// severityOf normalizes a rule's severity field; empty means error.
+func severityOf(s string) string {
+	if s == "warn" {
+		return "warn"
+	}
+	return "error"
+}
+
+// CountErrors returns how many violations are error-severity.
+func CountErrors(vs []Violation) int {
+	n := 0
+	for _, v := range vs {
+		if v.Severity != "warn" {
+			n++
+		}
+	}
+	return n
 }
 
 // Fingerprint identifies a violation for baseline matching. It excludes
@@ -40,6 +61,7 @@ func Check(cfg *config.Config, root string, files []scan.File, results map[strin
 			continue
 		}
 		out = append(out, checkLayerDeps(cfg, f, res, layerOf)...)
+		out = append(out, checkEncapsulation(cfg, f, res, layerOf)...)
 		out = append(out, checkMetrics(cfg, f, res)...)
 		out = append(out, checkNaming(cfg, f, res)...)
 		out = append(out, checkBans(cfg, f, res)...)
@@ -48,6 +70,7 @@ func Check(cfg *config.Config, root string, files []scan.File, results map[strin
 	}
 	out = append(out, checkPairing(cfg, files)...)
 	out = append(out, checkDeps(cfg, root)...)
+	out = append(out, checkCycles(cfg, files, results)...)
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].File != out[j].File {
 			return out[i].File < out[j].File
@@ -75,16 +98,18 @@ func checkLayerDeps(cfg *config.Config, f scan.File, res *analyze.Result, layerO
 		case verdictDenied:
 			out = append(out, Violation{
 				File: f.Path, Line: imp.Line,
-				Rule:   fmt.Sprintf("deny: %s", rule.Expr()),
-				Detail: fmt.Sprintf("%s (%s) imports %s (%s)", f.Path, f.Layer, imp.Resolved, toLayer),
-				Reason: rule.Reason,
+				Rule:     fmt.Sprintf("deny: %s", rule.Expr()),
+				Detail:   fmt.Sprintf("%s (%s) imports %s (%s)", f.Path, f.Layer, imp.Resolved, toLayer),
+				Reason:   rule.Reason,
+				Severity: severityOf(rule.Severity),
 			})
 		case verdictUndeclared:
 			if cfg.Strict {
 				out = append(out, Violation{
 					File: f.Path, Line: imp.Line,
-					Rule:   "strict: undeclared dependency",
-					Detail: fmt.Sprintf("%s -> %s is not covered by any allow rule", f.Layer, toLayer),
+					Rule:     "strict: undeclared dependency",
+					Detail:   fmt.Sprintf("%s -> %s is not covered by any allow rule", f.Layer, toLayer),
+					Severity: "error",
 				})
 			}
 		}
@@ -130,18 +155,20 @@ func checkMetrics(cfg *config.Config, f scan.File, res *analyze.Result) []Violat
 		}
 		if m.MaxLines > 0 && res.Lines > m.MaxLines {
 			out = append(out, Violation{
-				File:   f.Path,
-				Rule:   fmt.Sprintf("max-lines: %d", m.MaxLines),
-				Detail: fmt.Sprintf("%d lines (limit %d)", res.Lines, m.MaxLines),
-				Reason: m.Reason,
+				File:     f.Path,
+				Rule:     fmt.Sprintf("max-lines: %d", m.MaxLines),
+				Detail:   fmt.Sprintf("%d lines (limit %d)", res.Lines, m.MaxLines),
+				Reason:   m.Reason,
+				Severity: severityOf(m.Severity),
 			})
 		}
 		if m.MaxImports > 0 && len(res.Imports) > m.MaxImports {
 			out = append(out, Violation{
-				File:   f.Path,
-				Rule:   fmt.Sprintf("max-imports: %d", m.MaxImports),
-				Detail: fmt.Sprintf("%d imports (limit %d)", len(res.Imports), m.MaxImports),
-				Reason: m.Reason,
+				File:     f.Path,
+				Rule:     fmt.Sprintf("max-imports: %d", m.MaxImports),
+				Detail:   fmt.Sprintf("%d imports (limit %d)", len(res.Imports), m.MaxImports),
+				Reason:   m.Reason,
+				Severity: severityOf(m.Severity),
 			})
 		}
 	}

@@ -12,6 +12,11 @@
         { "type": "string" },
         { "type": "array", "items": { "type": "string" }, "minItems": 1 }
       ]
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["error", "warn"],
+      "description": "warn is reported but does not fail the check. Default: error."
     }
   },
   "properties": {
@@ -53,7 +58,8 @@
           "reason": {
             "type": "string",
             "description": "Why this rule exists. Shown to humans and AI agents on violation."
-          }
+          },
+          "severity": { "$ref": "#/$defs/severity" }
         },
         "oneOf": [{ "required": ["allow"] }, { "required": ["deny"] }]
       }
@@ -70,7 +76,8 @@
           "target": { "$ref": "#/$defs/stringList", "description": "Glob pattern(s) selecting the files to measure." },
           "max-lines": { "type": "integer", "minimum": 1, "description": "Maximum lines per file." },
           "max-imports": { "type": "integer", "minimum": 1, "description": "Maximum import declarations per file (fan-out)." },
-          "reason": { "type": "string" }
+          "reason": { "type": "string" },
+          "severity": { "$ref": "#/$defs/severity" }
         }
       }
     },
@@ -86,7 +93,8 @@
           "target": { "$ref": "#/$defs/stringList" },
           "file-pattern": { "type": "string", "description": "Glob the file's base name must match, e.g. \"use[A-Z]*.ts\"." },
           "symbol-pattern": { "type": "string", "description": "Glob every exported top-level symbol must match, e.g. \"*Repository\"." },
-          "reason": { "type": "string" }
+          "reason": { "type": "string" },
+          "severity": { "$ref": "#/$defs/severity" }
         }
       }
     },
@@ -111,7 +119,8 @@
             "description": "Substrings that must not appear, e.g. \"console.log\"."
           },
           "except": { "$ref": "#/$defs/stringList", "description": "Paths excluded from this ban." },
-          "reason": { "type": "string" }
+          "reason": { "type": "string" },
+          "severity": { "$ref": "#/$defs/severity" }
         }
       }
     },
@@ -123,7 +132,8 @@
       "properties": {
         "deny": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
         "except": { "$ref": "#/$defs/stringList" },
-        "reason": { "type": "string" }
+        "reason": { "type": "string" },
+          "severity": { "$ref": "#/$defs/severity" }
       }
     },
     "placeholders": {
@@ -134,7 +144,8 @@
       "properties": {
         "deny": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
         "except": { "$ref": "#/$defs/stringList" },
-        "reason": { "type": "string" }
+        "reason": { "type": "string" },
+          "severity": { "$ref": "#/$defs/severity" }
       }
     },
     "dependencies": {
@@ -149,7 +160,8 @@
         },
         "allow": { "type": "array", "items": { "type": "string" } },
         "deny": { "type": "array", "items": { "type": "string" } },
-        "reason": { "type": "string" }
+        "reason": { "type": "string" },
+          "severity": { "$ref": "#/$defs/severity" }
       }
     },
     "coverage": {
@@ -159,7 +171,8 @@
       "properties": {
         "require-layer": { "type": "boolean" },
         "except": { "$ref": "#/$defs/stringList" },
-        "reason": { "type": "string" }
+        "reason": { "type": "string" },
+          "severity": { "$ref": "#/$defs/severity" }
       }
     },
     "pairing": {
@@ -175,7 +188,34 @@
             "type": "string",
             "description": "Glob a companion file must match; {name} expands to the file's base name without extension."
           },
-          "reason": { "type": "string" }
+          "reason": { "type": "string" },
+          "severity": { "$ref": "#/$defs/severity" }
+        }
+      }
+    },
+    "cycles": {
+      "type": "object",
+      "description": "Forbid circular dependencies between project files.",
+      "additionalProperties": false,
+      "properties": {
+        "deny": { "type": "boolean" },
+        "except": { "$ref": "#/$defs/stringList" },
+        "reason": { "type": "string" },
+        "severity": { "$ref": "#/$defs/severity" }
+      }
+    },
+    "encapsulation": {
+      "type": "array",
+      "description": "Force other layers to import a layer only through its entry files.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["layer", "entry"],
+        "properties": {
+          "layer": { "type": "string" },
+          "entry": { "$ref": "#/$defs/stringList", "description": "Glob(s) of the layer's public entry files, e.g. \"src/domain/index.ts\"." },
+          "reason": { "type": "string" },
+          "severity": { "$ref": "#/$defs/severity" }
         }
       }
     },

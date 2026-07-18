@@ -43,6 +43,10 @@ type Config struct {
 	Coverage *Coverage `yaml:"coverage"`
 	// Pairing requires companion files (e.g. tests) to exist.
 	Pairing []PairRule `yaml:"pairing"`
+	// Cycles forbids circular dependencies between files.
+	Cycles *CycleRule `yaml:"cycles"`
+	// Encapsulation forces access to a layer through its entry files.
+	Encapsulation []EncapsulationRule `yaml:"encapsulation"`
 	// Resolve tunes import resolution (path aliases etc.).
 	Resolve *Resolve `yaml:"resolve"`
 	// Baseline is a path to a JSON file holding grandfathered violations.
@@ -58,33 +62,37 @@ type NamingRule struct {
 	FilePattern   string     `yaml:"file-pattern"`
 	SymbolPattern string     `yaml:"symbol-pattern"`
 	Reason        string     `yaml:"reason"`
+	Severity      string     `yaml:"severity"`
 }
 
 // BanRule forbids import specifiers (glob on the raw specifier) and calls
 // (substring match, e.g. "console.log") inside files matching Target.
 type BanRule struct {
-	Target  StringList `yaml:"target"`
-	Imports []string   `yaml:"imports"`
-	Calls   []string   `yaml:"calls"`
-	Except  StringList `yaml:"except"`
-	Reason  string     `yaml:"reason"`
+	Target   StringList `yaml:"target"`
+	Imports  []string   `yaml:"imports"`
+	Calls    []string   `yaml:"calls"`
+	Except   StringList `yaml:"except"`
+	Reason   string     `yaml:"reason"`
+	Severity string     `yaml:"severity"`
 }
 
 // PatternRule forbids substrings anywhere in matched source lines.
 type PatternRule struct {
-	Deny   []string   `yaml:"deny"`
-	Except StringList `yaml:"except"`
-	Reason string     `yaml:"reason"`
+	Deny     []string   `yaml:"deny"`
+	Except   StringList `yaml:"except"`
+	Reason   string     `yaml:"reason"`
+	Severity string     `yaml:"severity"`
 }
 
 // DepsPolicy gates external dependencies declared in package.json, go.mod,
 // and requirements.txt. Deny always wins; with policy "allowlist", every
 // dependency must match an allow pattern.
 type DepsPolicy struct {
-	Policy string   `yaml:"policy"`
-	Allow  []string `yaml:"allow"`
-	Deny   []string `yaml:"deny"`
-	Reason string   `yaml:"reason"`
+	Policy   string   `yaml:"policy"`
+	Allow    []string `yaml:"allow"`
+	Deny     []string `yaml:"deny"`
+	Reason   string   `yaml:"reason"`
+	Severity string   `yaml:"severity"`
 }
 
 // Coverage requires each scanned file to belong to some layer, so new files
@@ -93,6 +101,7 @@ type Coverage struct {
 	RequireLayer bool       `yaml:"require-layer"`
 	Except       StringList `yaml:"except"`
 	Reason       string     `yaml:"reason"`
+	Severity     string     `yaml:"severity"`
 }
 
 // PairRule requires a companion file to exist for each file matching Target.
@@ -101,6 +110,24 @@ type PairRule struct {
 	Target   StringList `yaml:"target"`
 	Requires string     `yaml:"requires"`
 	Reason   string     `yaml:"reason"`
+	Severity string     `yaml:"severity"`
+}
+
+// CycleRule forbids circular dependencies between project files.
+type CycleRule struct {
+	Deny     bool       `yaml:"deny"`
+	Except   StringList `yaml:"except"`
+	Reason   string     `yaml:"reason"`
+	Severity string     `yaml:"severity"`
+}
+
+// EncapsulationRule forces other layers to import Layer only through its
+// Entry files, so internals stay private to the layer.
+type EncapsulationRule struct {
+	Layer    string     `yaml:"layer"`
+	Entry    StringList `yaml:"entry"`
+	Reason   string     `yaml:"reason"`
+	Severity string     `yaml:"severity"`
 }
 
 // Resolve tunes import resolution.
@@ -134,9 +161,10 @@ type Layer struct {
 // Rule is a single dependency rule. Exactly one of Allow or Deny is set,
 // using arrow notation: "ui -> usecase". "*" is a wildcard for any layer.
 type Rule struct {
-	Allow  string `yaml:"allow"`
-	Deny   string `yaml:"deny"`
-	Reason string `yaml:"reason"`
+	Allow    string `yaml:"allow"`
+	Deny     string `yaml:"deny"`
+	Reason   string `yaml:"reason"`
+	Severity string `yaml:"severity"`
 
 	// Parsed form, populated by Validate.
 	Kind RuleKind `yaml:"-"`
@@ -161,8 +189,9 @@ func (r Rule) Expr() string {
 
 // MetricGroup applies metric limits to files matching Target.
 type MetricGroup struct {
-	Target StringList `yaml:"target"`
-	Reason string     `yaml:"reason"`
+	Target   StringList `yaml:"target"`
+	Reason   string     `yaml:"reason"`
+	Severity string     `yaml:"severity"`
 
 	// Limits. Zero means "not set".
 	MaxLines   int `yaml:"max-lines"`
@@ -297,7 +326,68 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("pairing %d: target and requires are required", i+1)
 		}
 	}
+	for i, e := range c.Encapsulation {
+		if e.Layer == "" || len(e.Entry) == 0 {
+			return fmt.Errorf("encapsulation %d: layer and entry are required", i+1)
+		}
+		if _, ok := c.Layers[e.Layer]; !ok {
+			return fmt.Errorf("encapsulation %d: unknown layer %q", i+1, e.Layer)
+		}
+	}
+	if err := c.validateSeverities(); err != nil {
+		return err
+	}
 	return nil
+}
+
+// validateSeverities checks every severity field is "", "error", or "warn".
+func (c *Config) validateSeverities() error {
+	check := func(where, s string) error {
+		if s != "" && s != "error" && s != "warn" {
+			return fmt.Errorf("%s: severity must be error or warn, got %q", where, s)
+		}
+		return nil
+	}
+	var err error
+	join := func(where, s string) {
+		if err == nil {
+			err = check(where, s)
+		}
+	}
+	for i, r := range c.Rules {
+		join(fmt.Sprintf("rule %d", i+1), r.Severity)
+	}
+	for i, m := range c.Metrics {
+		join(fmt.Sprintf("metrics %d", i+1), m.Severity)
+	}
+	for i, n := range c.Naming {
+		join(fmt.Sprintf("naming %d", i+1), n.Severity)
+	}
+	for i, b := range c.Bans {
+		join(fmt.Sprintf("bans %d", i+1), b.Severity)
+	}
+	if c.Suppressions != nil {
+		join("suppressions", c.Suppressions.Severity)
+	}
+	if c.Placeholders != nil {
+		join("placeholders", c.Placeholders.Severity)
+	}
+	if c.Dependencies != nil {
+		join("dependencies", c.Dependencies.Severity)
+	}
+	if c.Coverage != nil {
+		join("coverage", c.Coverage.Severity)
+	}
+	for i, p := range c.Pairing {
+		join(fmt.Sprintf("pairing %d", i+1), p.Severity)
+	}
+	if c.Cycles != nil {
+		join("cycles", c.Cycles.Severity)
+	}
+	for i, e := range c.Encapsulation {
+		join(fmt.Sprintf("encapsulation %d", i+1), e.Severity)
+	}
+	return err
 }
 
 // LayerNames returns layer names sorted alphabetically.

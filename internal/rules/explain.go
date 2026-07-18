@@ -29,6 +29,8 @@ type Explanation struct {
 	Suppressions     *RuleInfo  `json:"suppressions,omitempty"`
 	Placeholders     *RuleInfo  `json:"placeholders,omitempty"`
 	Pairing          []RuleInfo `json:"pairing,omitempty"`
+	Cycles           *RuleInfo  `json:"cycles,omitempty"`
+	Encapsulation    []RuleInfo `json:"encapsulation,omitempty"`
 }
 
 // Explain collects the rules that would apply to the given file path.
@@ -103,6 +105,17 @@ func Explain(cfg *config.Config, rel string) *Explanation {
 		e.Pairing = append(e.Pairing, RuleInfo{
 			Rule:   "requires: " + strings.ReplaceAll(p.Requires, "{name}", name),
 			Reason: p.Reason,
+		})
+	}
+	if c := cfg.Cycles; c != nil && c.Deny && !scan.Match(c.Except, rel) {
+		e.Cycles = &RuleInfo{Rule: "deny circular dependencies", Reason: c.Reason}
+	}
+	for _, enc := range cfg.Encapsulation {
+		// Relevant both inside the layer (your internals are private) and
+		// outside it (import only via the entry files).
+		e.Encapsulation = append(e.Encapsulation, RuleInfo{
+			Rule:   fmt.Sprintf("layer %s only via: %s", enc.Layer, strings.Join(enc.Entry, ", ")),
+			Reason: enc.Reason,
 		})
 	}
 	return e

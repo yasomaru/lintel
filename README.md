@@ -146,6 +146,16 @@ pairing:
   - target: "src/usecase/**/*.ts"
     requires: "tests/**/{name}.test.ts"
     reason: Every use case ships with a test.
+    severity: warn   # any rule can be warn: reported, but doesn't fail CI
+
+cycles:
+  deny: true
+  reason: Circular dependencies make modules inseparable.
+
+encapsulation:
+  - layer: domain
+    entry: "src/domain/index.ts"
+    reason: Domain internals are private. Import via the public entry point.
 
 resolve:
   aliases:
@@ -168,6 +178,8 @@ baseline: .lintel-baseline.json
 | `dependencies` | manifest allowlist / denylist | random npm packages appearing |
 | `coverage` | every file belongs to a layer | `utils/` dumping grounds |
 | `pairing` | companion file must exist | "I'll add tests later" |
+| `cycles` | circular dependencies between files | import knots nobody can untangle |
+| `encapsulation` | layer accessed only via entry files | reaching into another layer's internals |
 
 ### Semantics
 
@@ -177,7 +189,10 @@ baseline: .lintel-baseline.json
    is a violation.
 4. If a file matches multiple layers, the longest (most specific) pattern
    wins.
-5. `description` and `reason` are not comments — they are carried into error
+5. Every rule accepts `severity: warn` — the violation is reported (and
+   annotated in PRs) but does not fail the check. Useful for socializing a
+   new rule before enforcing it.
+6. `description` and `reason` are not comments — they are carried into error
    messages and JSON output, so humans and AI agents see *why* a rule exists.
 
 ### Editor completion

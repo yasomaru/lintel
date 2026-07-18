@@ -19,8 +19,8 @@ func TestSchemaIsValidJSON(t *testing.T) {
 	// Every top-level config key must be documented in the schema.
 	for _, key := range []string{
 		"layers", "rules", "metrics", "naming", "bans", "suppressions",
-		"placeholders", "dependencies", "coverage", "pairing", "resolve",
-		"baseline", "strict",
+		"placeholders", "dependencies", "coverage", "pairing", "cycles",
+		"encapsulation", "resolve", "baseline", "strict",
 	} {
 		if _, ok := props[key]; !ok {
 			t.Errorf("schema is missing top-level property %q", key)

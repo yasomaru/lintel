@@ -53,10 +53,11 @@ func checkNaming(cfg *config.Config, f scan.File, res *analyze.Result) []Violati
 			base := path.Base(f.Path)
 			if ok, _ := doublestar.Match(n.FilePattern, base); !ok {
 				out = append(out, Violation{
-					File:   f.Path,
-					Rule:   fmt.Sprintf("naming: file-pattern %s", n.FilePattern),
-					Detail: fmt.Sprintf("file name %q does not match %q", base, n.FilePattern),
-					Reason: n.Reason,
+					File:     f.Path,
+					Rule:     fmt.Sprintf("naming: file-pattern %s", n.FilePattern),
+					Detail:   fmt.Sprintf("file name %q does not match %q", base, n.FilePattern),
+					Reason:   n.Reason,
+					Severity: severityOf(n.Severity),
 				})
 			}
 		}
@@ -65,9 +66,10 @@ func checkNaming(cfg *config.Config, f scan.File, res *analyze.Result) []Violati
 				if ok, _ := doublestar.Match(n.SymbolPattern, s.Name); !ok {
 					out = append(out, Violation{
 						File: f.Path, Line: s.Line,
-						Rule:   fmt.Sprintf("naming: symbol-pattern %s", n.SymbolPattern),
-						Detail: fmt.Sprintf("exported symbol %q does not match %q", s.Name, n.SymbolPattern),
-						Reason: n.Reason,
+						Rule:     fmt.Sprintf("naming: symbol-pattern %s", n.SymbolPattern),
+						Detail:   fmt.Sprintf("exported symbol %q does not match %q", s.Name, n.SymbolPattern),
+						Reason:   n.Reason,
+						Severity: severityOf(n.Severity),
 					})
 				}
 			}
@@ -87,9 +89,10 @@ func checkBans(cfg *config.Config, f scan.File, res *analyze.Result) []Violation
 				if ok, _ := doublestar.Match(pat, imp.Raw); ok {
 					out = append(out, Violation{
 						File: f.Path, Line: imp.Line,
-						Rule:   fmt.Sprintf("bans: import %s", pat),
-						Detail: fmt.Sprintf("import %q is banned here", imp.Raw),
-						Reason: b.Reason,
+						Rule:     fmt.Sprintf("bans: import %s", pat),
+						Detail:   fmt.Sprintf("import %q is banned here", imp.Raw),
+						Reason:   b.Reason,
+						Severity: severityOf(b.Severity),
 					})
 				}
 			}
@@ -102,9 +105,10 @@ func checkBans(cfg *config.Config, f scan.File, res *analyze.Result) []Violation
 			if banned[hit.Pattern] {
 				out = append(out, Violation{
 					File: f.Path, Line: hit.Line,
-					Rule:   fmt.Sprintf("bans: call %s", hit.Pattern),
-					Detail: fmt.Sprintf("%q is banned here", hit.Pattern),
-					Reason: b.Reason,
+					Rule:     fmt.Sprintf("bans: call %s", hit.Pattern),
+					Detail:   fmt.Sprintf("%q is banned here", hit.Pattern),
+					Reason:   b.Reason,
+					Severity: severityOf(b.Severity),
 				})
 			}
 		}
@@ -126,9 +130,10 @@ func checkPatterns(kind string, pr *config.PatternRule, f scan.File, res *analyz
 		if denied[hit.Pattern] {
 			out = append(out, Violation{
 				File: f.Path, Line: hit.Line,
-				Rule:   fmt.Sprintf("%s: %s", kind, hit.Pattern),
-				Detail: fmt.Sprintf("%q found", hit.Pattern),
-				Reason: pr.Reason,
+				Rule:     fmt.Sprintf("%s: %s", kind, hit.Pattern),
+				Detail:   fmt.Sprintf("%q found", hit.Pattern),
+				Reason:   pr.Reason,
+				Severity: severityOf(pr.Severity),
 			})
 		}
 	}
@@ -141,10 +146,11 @@ func checkCoverage(cfg *config.Config, f scan.File) []Violation {
 		return nil
 	}
 	return []Violation{{
-		File:   f.Path,
-		Rule:   "coverage: require-layer",
-		Detail: fmt.Sprintf("%s does not belong to any layer (known: %s)", f.Path, strings.Join(cfg.LayerNames(), ", ")),
-		Reason: cov.Reason,
+		File:     f.Path,
+		Rule:     "coverage: require-layer",
+		Detail:   fmt.Sprintf("%s does not belong to any layer (known: %s)", f.Path, strings.Join(cfg.LayerNames(), ", ")),
+		Reason:   cov.Reason,
+		Severity: severityOf(cov.Severity),
 	}}
 }
 
@@ -169,10 +175,11 @@ func checkPairing(cfg *config.Config, files []scan.File) []Violation {
 				continue
 			}
 			out = append(out, Violation{
-				File:   f.Path,
-				Rule:   fmt.Sprintf("pairing: %s", p.Requires),
-				Detail: fmt.Sprintf("no file matches %q", want),
-				Reason: p.Reason,
+				File:     f.Path,
+				Rule:     fmt.Sprintf("pairing: %s", p.Requires),
+				Detail:   fmt.Sprintf("no file matches %q", want),
+				Reason:   p.Reason,
+				Severity: severityOf(p.Severity),
 			})
 		}
 	}
@@ -208,9 +215,10 @@ func checkDeps(cfg *config.Config, root string) []Violation {
 			if ok, _ := doublestar.Match(pat, dep.Name); ok {
 				out = append(out, Violation{
 					File: dep.File, Line: dep.Line,
-					Rule:   fmt.Sprintf("dependencies: deny %s", pat),
-					Detail: fmt.Sprintf("dependency %q is banned", dep.Name),
-					Reason: d.Reason,
+					Rule:     fmt.Sprintf("dependencies: deny %s", pat),
+					Detail:   fmt.Sprintf("dependency %q is banned", dep.Name),
+					Reason:   d.Reason,
+					Severity: severityOf(d.Severity),
 				})
 				denied = true
 				break
@@ -229,9 +237,10 @@ func checkDeps(cfg *config.Config, root string) []Violation {
 		if !allowed {
 			out = append(out, Violation{
 				File: dep.File, Line: dep.Line,
-				Rule:   "dependencies: not in allowlist",
-				Detail: fmt.Sprintf("dependency %q is not in the allowlist", dep.Name),
-				Reason: d.Reason,
+				Rule:     "dependencies: not in allowlist",
+				Detail:   fmt.Sprintf("dependency %q is not in the allowlist", dep.Name),
+				Reason:   d.Reason,
+				Severity: severityOf(d.Severity),
 			})
 		}
 	}
