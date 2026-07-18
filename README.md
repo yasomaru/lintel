@@ -38,8 +38,11 @@ JSON output that AI agents can read and fix against.
 - **Adoptable in brownfield codebases.** `lintel baseline` quarantines
   existing violations so only *new* ones fail the build. Pay the debt down
   at your own pace.
-- **Fast.** Single static binary, parses imports only (no type checking),
-  analyzes files in parallel. A 5,000-file project checks in ~0.5s on a
+- **Real parsing, still one static binary.** Source files are parsed with
+  tree-sitter compiled to WebAssembly and run via [wazero](https://wazero.io)
+  — no cgo, cross-compilation intact, and comments or string literals never
+  produce false imports.
+- **Fast.** Parallel analysis; a 5,000-file project checks in ~1s on a
   laptop — suitable for pre-commit hooks and editor save actions.
 
 ## Install
@@ -346,6 +349,10 @@ $ lintel context >> CLAUDE.md
 
 ## Language support
 
+Extraction is AST-based: bundled tree-sitter grammars for TypeScript, TSX,
+JavaScript, Go, Python, and Java, parsed in WebAssembly via wazero (cgo-free).
+Set `LINTEL_ENGINE=regex` to fall back to the legacy regex extractors.
+
 | Language | Dependency extraction |
 |----------|----------------------|
 | Go       | `import` declarations, resolved via `go.mod` module path |
@@ -357,10 +364,8 @@ Dependency gate manifests: `package.json`, `go.mod`, `requirements.txt`,
 `pom.xml`, `build.gradle` / `build.gradle.kts` (Java deps are matched as
 `"group:artifact"`, e.g. `deny: ["org.projectlombok:*"]`).
 
-### Known limitations (v0)
+### Known limitations
 
-- Import extraction is regex-based (except Go). Import-like strings inside
-  comments or string literals can produce false positives.
 - Alias detection reads the root `tsconfig.json` only; per-package tsconfigs
   in a monorepo need explicit `resolve.aliases` for now.
 - Java classes in the *same* package are visible without an `import`, so a
@@ -368,12 +373,9 @@ Dependency gate manifests: `package.json`, `go.mod`, `requirements.txt`,
   In practice layers map to distinct packages, where imports are required.
 - `suppressions` / `placeholders` / `calls` are substring matches — a pattern
   appearing in a doc comment also counts. (lintel's own CI once flagged
-  lintel's source for mentioning a suppression marker in a comment. We fixed
-  the comment.)
-
-The roadmap replaces the extraction layer with a tree-sitter backend behind
-the same interface, which removes these caveats without touching the rule
-engine.
+  lintel's source for mentioning a suppression marker in a comment.)
+- Import resolution is heuristic (no type checker); imports lintel cannot
+  resolve to a project file are treated as external and skipped.
 
 ## Roadmap
 
@@ -384,9 +386,9 @@ engine.
 - [x] `lintel rules <path>`: let AI agents query the rules *before* writing code
 - [x] React metrics (`max-use-state`, `max-use-effect`)
 - [x] `lintel context`: emit a CLAUDE.md-ready summary of the architecture
-- [ ] tree-sitter backend + language packs (replaces v0's regex extraction;
-      needs a cgo-compatible release pipeline, so it lands as its own major effort)
-- [ ] Deeper structural metrics (`max-public-methods`, `max-method-lines`) on the tree-sitter backend
+- [x] tree-sitter backend (WebAssembly + wazero, cgo-free) for TS/TSX/JS/Go/Python/Java
+- [ ] Deeper structural metrics (`max-public-methods`, `max-method-lines`) on the AST backend
+- [ ] More bundled grammars (Rust, Kotlin, C#, Ruby, PHP)
 
 ## Contributing
 

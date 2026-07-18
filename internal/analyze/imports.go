@@ -48,6 +48,8 @@ type Project struct {
 	Patterns []string
 	// aliases resolve bare specifiers like "@/domain/user" to project paths.
 	aliases []aliasRule
+	// engineOff disables the AST backend (LINTEL_ENGINE=regex).
+	engineOff bool
 	// files is the set of known project files (slash-relative paths).
 	files map[string]bool
 	// goDirs maps a package directory (module-relative) to one file in it.
@@ -79,6 +81,7 @@ func NewProject(root string, relPaths []string, opts Options) *Project {
 		javaDirFile: map[string]string{},
 	}
 	p.aliases = buildAliases(root, opts.Aliases)
+	p.engineOff = os.Getenv("LINTEL_ENGINE") == "regex"
 	for _, f := range relPaths {
 		dir := path.Dir(f)
 		switch path.Ext(f) {
@@ -118,6 +121,14 @@ func NewProject(root string, relPaths []string, opts Options) *Project {
 
 // File analyzes one file (slash-relative path).
 func (p *Project) File(rel string) (*Result, error) {
+	eng := getEngine(p.engineOff)
+	defer putEngine(eng)
+	return p.fileWith(rel, eng)
+}
+
+// fileWith analyzes one file using the AST engine when available for the
+// file's language, falling back to the regex extractors otherwise.
+func (p *Project) fileWith(rel string, eng *engine) (*Result, error) {
 	abs := filepath.Join(p.Root, filepath.FromSlash(rel))
 	data, err := os.ReadFile(abs)
 	if err != nil {
@@ -125,7 +136,23 @@ func (p *Project) File(rel string) (*Result, error) {
 	}
 	src := string(data)
 	res := &Result{Lines: countLines(src)}
-	switch path.Ext(rel) {
+	ext := path.Ext(rel)
+
+	if eng != nil {
+		if al, ok := astLangs[ext]; ok {
+			raws, syms, err := eng.extract(al, ext, src)
+			if err == nil {
+				res.Imports = p.resolveRaws(rel, ext, raws, src)
+				res.Exports = syms
+				res.Hits = scanPatterns(src, p.Patterns)
+				return res, nil
+			}
+			// Engine trouble (wasm failure, query mismatch): fall through
+			// to the regex path rather than losing the file.
+		}
+	}
+
+	switch ext {
 	case ".go":
 		res.Imports = p.goImports(src)
 	case ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs":

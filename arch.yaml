@@ -27,5 +27,8 @@ suppressions:
 
 dependencies:
   policy: allowlist
-  allow: ["github.com/bmatcuk/doublestar/*", "gopkg.in/yaml.v3"]
+  allow:
+    - "github.com/bmatcuk/doublestar/*"
+    - "gopkg.in/yaml.v3"
+    - "github.com/tetratelabs/wazero"   # runs the tree-sitter wasm backend
   reason: Keep the dependency footprint minimal; new deps need a config change.
