@@ -20,25 +20,26 @@ func (p *Project) javaImports(src string) []Import {
 
 // resolveJava maps a fully-qualified import to a project file by matching
 // the package path against file path suffixes, so it works with any source
-// root (src/main/java, src/, or none). javaFiles is sorted, so the first
+// root (src/main/java, src/, or none). Indexes are sorted, so the first
 // match is deterministic.
 func (p *Project) resolveJava(raw string) string {
 	if pkg, ok := strings.CutSuffix(raw, ".*"); ok {
 		// Wildcard: any file directly inside the package directory.
 		dir := strings.ReplaceAll(pkg, ".", "/")
-		for _, f := range p.javaFiles {
-			if i := strings.LastIndex(f, "/"); i >= 0 && pathEndsWith(f[:i], dir) {
-				return f
+		for _, d := range p.javaDirs {
+			if pathEndsWith(d, dir) {
+				return p.javaDirFile[d]
 			}
 		}
 		return ""
 	}
 	// "a.b.C" or "a.b.C.member" (static import / nested class): try the
 	// longest prefix that maps to a file, dropping trailing segments.
+	// Candidate files are pre-indexed by class (base) name.
 	segs := strings.Split(raw, ".")
 	for k := len(segs); k >= 1; k-- {
 		want := strings.Join(segs[:k], "/") + ".java"
-		for _, f := range p.javaFiles {
+		for _, f := range p.javaByBase[segs[k-1]] {
 			if pathEndsWith(f, want) {
 				return f
 			}

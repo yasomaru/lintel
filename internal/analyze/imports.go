@@ -50,9 +50,14 @@ type Project struct {
 	aliases []aliasRule
 	// files is the set of known project files (slash-relative paths).
 	files map[string]bool
-	// javaFiles is a sorted list of .java files, for suffix-based
-	// package resolution independent of the source root layout.
-	javaFiles []string
+	// goDirs maps a package directory (module-relative) to one file in it.
+	goDirs map[string]string
+	// javaByBase maps a class/file base name to its paths, sorted.
+	javaByBase map[string][]string
+	// javaDirs lists directories containing .java files, sorted, with a
+	// representative file per directory for wildcard-import resolution.
+	javaDirs    []string
+	javaDirFile map[string]string
 }
 
 // Options tunes project analysis.
@@ -66,14 +71,36 @@ type Options struct {
 
 // NewProject builds resolution context for the given root and file set.
 func NewProject(root string, relPaths []string, opts Options) *Project {
-	p := &Project{Root: root, Patterns: opts.Patterns, files: make(map[string]bool, len(relPaths))}
+	p := &Project{
+		Root: root, Patterns: opts.Patterns,
+		files:       make(map[string]bool, len(relPaths)),
+		goDirs:      map[string]string{},
+		javaByBase:  map[string][]string{},
+		javaDirFile: map[string]string{},
+	}
 	p.aliases = buildAliases(root, opts.Aliases)
 	for _, f := range relPaths {
-		if strings.HasSuffix(f, ".java") {
-			p.javaFiles = append(p.javaFiles, f)
+		dir := path.Dir(f)
+		switch path.Ext(f) {
+		case ".go":
+			if cur, ok := p.goDirs[dir]; !ok || f < cur {
+				p.goDirs[dir] = f
+			}
+		case ".java":
+			base := strings.TrimSuffix(path.Base(f), ".java")
+			p.javaByBase[base] = append(p.javaByBase[base], f)
+			if cur, ok := p.javaDirFile[dir]; !ok || f < cur {
+				p.javaDirFile[dir] = f
+			}
 		}
 	}
-	sort.Strings(p.javaFiles)
+	for _, paths := range p.javaByBase {
+		sort.Strings(paths)
+	}
+	for d := range p.javaDirFile {
+		p.javaDirs = append(p.javaDirs, d)
+	}
+	sort.Strings(p.javaDirs)
 	for _, f := range relPaths {
 		p.files[f] = true
 	}
@@ -159,13 +186,8 @@ func (p *Project) resolveGo(raw string) string {
 	if !ok {
 		return ""
 	}
-	// A Go import points at a package directory; map it to any file inside.
-	for f := range p.files {
-		if path.Dir(f) == sub {
-			return f
-		}
-	}
-	return ""
+	// A Go import points at a package directory; map it to a file inside.
+	return p.goDirs[sub]
 }
 
 // --- JS / TS ---

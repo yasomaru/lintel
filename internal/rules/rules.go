@@ -20,6 +20,10 @@ type Violation struct {
 	Reason string `json:"reason,omitempty"`
 	// Severity is "error" (fails the check) or "warn" (reported only).
 	Severity string `json:"severity"`
+	// key overrides the baseline fingerprint. Checks whose Detail contains
+	// unstable values (current line counts etc.) set it so that baselined
+	// violations don't resurface on unrelated edits.
+	key string
 }
 
 // severityOf normalizes a rule's severity field; empty means error.
@@ -44,6 +48,9 @@ func CountErrors(vs []Violation) int {
 // Fingerprint identifies a violation for baseline matching. It excludes
 // the line number so violations don't churn on unrelated edits.
 func (v Violation) Fingerprint() string {
+	if v.key != "" {
+		return v.key
+	}
 	return v.File + "|" + v.Rule + "|" + v.Detail
 }
 
@@ -154,21 +161,27 @@ func checkMetrics(cfg *config.Config, f scan.File, res *analyze.Result) []Violat
 			continue
 		}
 		if m.MaxLines > 0 && res.Lines > m.MaxLines {
+			rule := fmt.Sprintf("max-lines: %d", m.MaxLines)
 			out = append(out, Violation{
 				File:     f.Path,
-				Rule:     fmt.Sprintf("max-lines: %d", m.MaxLines),
+				Rule:     rule,
 				Detail:   fmt.Sprintf("%d lines (limit %d)", res.Lines, m.MaxLines),
 				Reason:   m.Reason,
 				Severity: severityOf(m.Severity),
+				// The detail carries the current count; keep the baseline
+				// fingerprint stable across edits.
+				key: f.Path + "|" + rule,
 			})
 		}
 		if m.MaxImports > 0 && len(res.Imports) > m.MaxImports {
+			rule := fmt.Sprintf("max-imports: %d", m.MaxImports)
 			out = append(out, Violation{
 				File:     f.Path,
-				Rule:     fmt.Sprintf("max-imports: %d", m.MaxImports),
+				Rule:     rule,
 				Detail:   fmt.Sprintf("%d imports (limit %d)", len(res.Imports), m.MaxImports),
 				Reason:   m.Reason,
 				Severity: severityOf(m.Severity),
+				key:      f.Path + "|" + rule,
 			})
 		}
 	}

@@ -163,6 +163,37 @@ func TestBaselineFilter(t *testing.T) {
 	}
 }
 
+// A baselined metric violation must keep its fingerprint when the measured
+// value drifts (e.g. the file grows by a line) — only file+rule identify it.
+func TestMetricFingerprintStableAcrossEdits(t *testing.T) {
+	cfg := `
+layers:
+  app:
+    path: "src/**"
+metrics:
+  - target: "src/**"
+    max-lines: 2
+`
+	content := func(lines int) map[string]string {
+		body := ""
+		for i := 0; i < lines; i++ {
+			body += "export const x" + string(rune('a'+i)) + " = 1;\n"
+		}
+		return map[string]string{"src/big.ts": body}
+	}
+	before := project(t, cfg, content(3))
+	after := project(t, cfg, content(5))
+	if len(before) != 1 || len(after) != 1 {
+		t.Fatalf("want 1 violation each, got %d and %d", len(before), len(after))
+	}
+	if before[0].Fingerprint() != after[0].Fingerprint() {
+		t.Errorf("fingerprint churned: %q vs %q", before[0].Fingerprint(), after[0].Fingerprint())
+	}
+	if before[0].Detail == after[0].Detail {
+		t.Errorf("details should differ (counts changed): %q", before[0].Detail)
+	}
+}
+
 func TestGoImports(t *testing.T) {
 	cfg := `
 layers:
