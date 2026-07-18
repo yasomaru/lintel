@@ -5,28 +5,44 @@ import (
 	"sync"
 )
 
-// All analyzes every file concurrently, one worker per CPU core.
+// All analyzes every file concurrently. Each worker owns one AST engine
+// (a wasm instance) for its whole batch; workers are capped both by CPU
+// count and by batch size so small runs don't pay several engine startups.
 // Unreadable or unsupported files are skipped, mirroring File's callers.
 func (p *Project) All(rels []string) map[string]*Result {
+	workers := runtime.NumCPU()
+	if n := (len(rels) + 63) / 64; n < workers {
+		workers = n
+	}
+	if workers < 1 {
+		workers = 1
+	}
+
+	jobs := make(chan string)
 	results := make(map[string]*Result, len(rels))
 	var mu sync.Mutex
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, runtime.NumCPU())
-	for _, rel := range rels {
+	for i := 0; i < workers; i++ {
 		wg.Add(1)
-		sem <- struct{}{}
-		go func(rel string) {
+		go func() {
 			defer wg.Done()
-			defer func() { <-sem }()
-			res, err := p.File(rel)
-			if err != nil {
-				return
+			eng := getEngine(p.engineOff)
+			defer putEngine(eng)
+			for rel := range jobs {
+				res, err := p.fileWith(rel, eng)
+				if err != nil {
+					continue
+				}
+				mu.Lock()
+				results[rel] = res
+				mu.Unlock()
 			}
-			mu.Lock()
-			results[rel] = res
-			mu.Unlock()
-		}(rel)
+		}()
 	}
+	for _, rel := range rels {
+		jobs <- rel
+	}
+	close(jobs)
 	wg.Wait()
 	return results
 }
