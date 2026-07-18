@@ -43,18 +43,23 @@ func WriteBaseline(path string, violations []Violation) error {
 	return os.WriteFile(path, append(data, '\n'), 0o644)
 }
 
-// Filter splits violations into new ones and baselined ones.
-func (b *Baseline) Filter(violations []Violation) (fresh, baselined []Violation) {
+// Filter splits violations into new ones and baselined ones. stale counts
+// baseline entries whose violation no longer occurs — debt already paid
+// down, so the baseline can be regenerated smaller.
+func (b *Baseline) Filter(violations []Violation) (fresh, baselined []Violation, stale int) {
 	known := make(map[string]bool, len(b.Fingerprints))
 	for _, fp := range b.Fingerprints {
 		known[fp] = true
 	}
+	seen := map[string]bool{}
 	for _, v := range violations {
-		if known[v.Fingerprint()] {
+		fp := v.Fingerprint()
+		if known[fp] {
 			baselined = append(baselined, v)
+			seen[fp] = true
 		} else {
 			fresh = append(fresh, v)
 		}
 	}
-	return fresh, baselined
+	return fresh, baselined, len(known) - len(seen)
 }

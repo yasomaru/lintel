@@ -195,6 +195,29 @@ baseline: .lintel-baseline.json
 6. `description` and `reason` are not comments — they are carried into error
    messages and JSON output, so humans and AI agents see *why* a rule exists.
 
+### Visualize the architecture
+
+`lintel graph` aggregates the real import graph into layer-level edges, in
+Mermaid (rendered natively by GitHub in Markdown) or Graphviz DOT. Denied
+edges are drawn dashed and red — the diagram shows not just the
+architecture you declared, but where reality disagrees with it:
+
+````console
+$ lintel graph
+graph LR
+  domain
+  infra
+  ui
+  ui -->|12| usecase
+  usecase -->|9| domain
+  infra -->|4| domain
+  domain -.->|1| infra
+  linkStyle 3 stroke:#e5534b,stroke-width:2px
+````
+
+Paste it into a PR description, or keep a living architecture diagram in
+your docs with `lintel graph > docs/architecture.mmd` in CI.
+
 ### Editor completion
 
 `arch.yaml` has a published [JSON Schema](docs/arch.schema.json). Generated
@@ -210,7 +233,8 @@ an AI agent as the contract when asking it to write or edit your rules.
 
 ## Using in CI
 
-`lintel check` exits with code 1 on violations — that's all CI needs:
+`lintel check` exits with code 1 on violations — that's all CI needs.
+There's a ready-made GitHub Action:
 
 ```yaml
 # .github/workflows/arch.yml
@@ -219,20 +243,31 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: |
-          curl -sL https://github.com/yasomaru/lintel/releases/latest/download/lintel_linux_amd64.tar.gz | tar xz
-          ./lintel check --format github
+      - uses: yasomaru/lintel@v0.7.0   # runs: lintel check --format github
 ```
 
-With `--format github`, violations appear as inline annotations on the PR
-diff, each carrying the rule's `reason`.
+With `--format github` (the Action's default), violations appear as inline
+annotations on the PR diff, each carrying the rule's `reason`;
+`severity: warn` rules become warning annotations.
+
+Or as a [pre-commit](https://pre-commit.com) hook:
+
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/yasomaru/lintel
+    rev: v0.7.0
+    hooks:
+      - id: lintel
+```
 
 Adoption flow for an existing codebase:
 
 1. `lintel baseline` and commit `.lintel-baseline.json` — existing violations
    are grandfathered.
 2. CI runs `lintel check` — only **new** violations fail the build.
-3. Pay down the baseline over time and regenerate it as it shrinks.
+3. Pay down the debt over time: when baselined violations get fixed, `check`
+   notes how many entries are stale so you can regenerate a smaller baseline.
 
 ## Using with AI agents
 

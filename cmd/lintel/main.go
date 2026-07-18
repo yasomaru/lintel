@@ -25,6 +25,7 @@ const usage = `lintel — architecture lint for any language
 Usage:
   lintel check [path]      check the project against arch.yaml
   lintel baseline [path]   record current violations as the baseline
+  lintel graph [path]      print the layer dependency graph (--format mermaid | dot)
   lintel init [--scan]     write a starter arch.yaml (--scan infers layers)
   lintel rules <path>      show the rules that apply to a file, as JSON
   lintel schema            print the JSON Schema for arch.yaml
@@ -46,6 +47,8 @@ func main() {
 		err = runCheck(os.Args[2:], false)
 	case "baseline":
 		err = runCheck(os.Args[2:], true)
+	case "graph":
+		err = runGraph(os.Args[2:])
 	case "init":
 		err = runInit(os.Args[2:])
 	case "rules":
@@ -81,23 +84,10 @@ func runCheck(args []string, writeBaseline bool) error {
 		*cfgPath = filepath.Join(root, "arch.yaml")
 	}
 
-	cfg, err := config.Load(*cfgPath)
+	cfg, files, results, err := loadAndAnalyze(root, *cfgPath)
 	if err != nil {
 		return err
 	}
-	files, err := scan.Walk(root, cfg)
-	if err != nil {
-		return err
-	}
-	relPaths := make([]string, len(files))
-	for i, f := range files {
-		relPaths[i] = f.Path
-	}
-	proj := analyze.NewProject(root, relPaths, analyze.Options{
-		Patterns: rules.TextPatterns(cfg),
-		Aliases:  cfg.AliasMap(),
-	})
-	results := proj.All(relPaths)
 
 	violations := rules.Check(cfg, root, files, results)
 
@@ -118,17 +108,19 @@ func runCheck(args []string, writeBaseline bool) error {
 	}
 
 	var baselined []rules.Violation
+	stale := 0
 	if baselinePath != "" {
 		b, err := rules.LoadBaseline(baselinePath)
 		if err != nil {
 			return err
 		}
-		violations, baselined = b.Filter(violations)
+		violations, baselined, stale = b.Filter(violations)
 	}
 
 	sum := report.Summary{
 		Violations: violations,
 		Baselined:  len(baselined),
+		Stale:      stale,
 		Files:      len(files),
 		// Warn-severity violations are reported but don't fail the check.
 		OK: rules.CountErrors(violations) == 0,
@@ -147,6 +139,58 @@ func runCheck(args []string, writeBaseline bool) error {
 	}
 	if !sum.OK {
 		os.Exit(1)
+	}
+	return nil
+}
+
+// loadAndAnalyze runs the shared pipeline: config, file walk, analysis.
+func loadAndAnalyze(root, cfgPath string) (*config.Config, []scan.File, map[string]*analyze.Result, error) {
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	files, err := scan.Walk(root, cfg)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	relPaths := make([]string, len(files))
+	for i, f := range files {
+		relPaths[i] = f.Path
+	}
+	proj := analyze.NewProject(root, relPaths, analyze.Options{
+		Patterns: rules.TextPatterns(cfg),
+		Aliases:  cfg.AliasMap(),
+	})
+	return cfg, files, proj.All(relPaths), nil
+}
+
+// runGraph prints the aggregated layer dependency graph.
+func runGraph(args []string) error {
+	fs := flag.NewFlagSet("graph", flag.ExitOnError)
+	cfgPath := fs.String("config", "", "config file path")
+	format := fs.String("format", "mermaid", "output format: mermaid | dot")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	root := "."
+	if fs.NArg() > 0 {
+		root = fs.Arg(0)
+	}
+	if *cfgPath == "" {
+		*cfgPath = filepath.Join(root, "arch.yaml")
+	}
+	cfg, files, results, err := loadAndAnalyze(root, *cfgPath)
+	if err != nil {
+		return err
+	}
+	edges := rules.LayerEdges(cfg, files, results)
+	switch *format {
+	case "mermaid":
+		report.Mermaid(os.Stdout, cfg.LayerNames(), edges)
+	case "dot":
+		report.Dot(os.Stdout, cfg.LayerNames(), edges)
+	default:
+		return fmt.Errorf("unknown format %q (want mermaid or dot)", *format)
 	}
 	return nil
 }

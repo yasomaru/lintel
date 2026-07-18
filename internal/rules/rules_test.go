@@ -151,9 +151,15 @@ func TestBaselineFilter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fresh, baselined := b.Filter(vs)
-	if len(fresh) != 1 || fresh[0].File != "b.ts" || len(baselined) != 1 {
-		t.Errorf("filter wrong: fresh=%+v baselined=%+v", fresh, baselined)
+	fresh, baselined, stale := b.Filter(vs)
+	if len(fresh) != 1 || fresh[0].File != "b.ts" || len(baselined) != 1 || stale != 0 {
+		t.Errorf("filter wrong: fresh=%+v baselined=%+v stale=%d", fresh, baselined, stale)
+	}
+
+	// When the baselined violation is fixed, it shows up as stale.
+	fresh, baselined, stale = b.Filter(vs[1:])
+	if len(fresh) != 1 || len(baselined) != 0 || stale != 1 {
+		t.Errorf("stale detection wrong: fresh=%+v baselined=%+v stale=%d", fresh, baselined, stale)
 	}
 }
 

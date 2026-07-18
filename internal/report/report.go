@@ -15,8 +15,10 @@ import (
 type Summary struct {
 	Violations []rules.Violation `json:"violations"`
 	Baselined  int               `json:"baselined"`
-	Files      int               `json:"files"`
-	OK         bool              `json:"ok"`
+	// Stale counts baseline entries whose violation no longer occurs.
+	Stale int  `json:"stale_baseline,omitempty"`
+	Files int  `json:"files"`
+	OK    bool `json:"ok"`
 }
 
 // JSON writes the summary as indented JSON.
@@ -115,4 +117,11 @@ func Human(w io.Writer, s Summary) {
 		fmt.Fprintf(w, ", %d baselined", s.Baselined)
 	}
 	fmt.Fprintln(w)
+	if s.Stale > 0 {
+		noun := "entries"
+		if s.Stale == 1 {
+			noun = "entry"
+		}
+		fmt.Fprintf(w, "note: %d baseline %s no longer occur — run `lintel baseline` to shrink the baseline\n", s.Stale, noun)
+	}
 }

@@ -1,0 +1,13 @@
+# pre-commit hook definition. In your project's .pre-commit-config.yaml:
+#
+#   repos:
+#     - repo: https://github.com/yasomaru/lintel
+#       rev: v0.7.0
+#       hooks:
+#         - id: lintel
+- id: lintel
+  name: lintel architecture check
+  description: Enforce the architecture rules declared in arch.yaml
+  entry: lintel check
+  language: golang
+  pass_filenames: false
