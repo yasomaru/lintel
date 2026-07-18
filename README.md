@@ -258,6 +258,26 @@ checks architecture after every file edit, in `.claude/settings.json`:
 The agent sees the violation *and the reason* immediately after writing the
 offending code, and fixes it before you ever review it.
 
+Agents can also query the constraints *before* writing:
+
+```console
+$ lintel rules src/domain/user.ts
+{
+  "file": "src/domain/user.ts",
+  "layer": "domain",
+  "layer_description": "Business logic. Must stay free of outward dependencies.",
+  "dependencies": [
+    { "rule": "deny: domain -> \"*\"", "reason": "The domain layer must not depend on any other layer." }
+  ],
+  "bans": [
+    { "rule": "imports: axios, @prisma/*; calls: fetch(", "reason": "The domain layer performs no I/O. Go through a repository." }
+  ]
+}
+```
+
+No resident server, no always-loaded tool schemas — the tokens are spent
+only when the agent actually asks.
+
 ## Language support
 
 | Language | Dependency extraction |
@@ -289,9 +309,10 @@ engine.
 - [x] `--format github` for PR line annotations
 - [x] JSON Schema for `arch.yaml` (editor completion, AI generation)
 - [x] `lintel init --scan`: infer a starter config from the existing tree
+- [x] `lintel rules <path>`: let AI agents query the rules *before* writing code
 - [ ] tree-sitter backend + language packs (replaces v0's regex extraction)
 - [ ] Framework-aware metrics (`max-use-state`, `max-public-methods`, ...)
-- [ ] MCP server mode: let AI agents query the rules *before* writing code
+- [ ] `lintel context`: emit a CLAUDE.md-ready summary of the architecture
 
 ## Contributing
 

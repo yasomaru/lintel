@@ -3,6 +3,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -25,6 +26,7 @@ Usage:
   lintel check [path]      check the project against arch.yaml
   lintel baseline [path]   record current violations as the baseline
   lintel init [--scan]     write a starter arch.yaml (--scan infers layers)
+  lintel rules <path>      show the rules that apply to a file, as JSON
   lintel schema            print the JSON Schema for arch.yaml
   lintel version           print the version
 
@@ -46,6 +48,8 @@ func main() {
 		err = runCheck(os.Args[2:], true)
 	case "init":
 		err = runInit(os.Args[2:])
+	case "rules":
+		err = runRules(os.Args[2:])
 	case "schema":
 		_, err = os.Stdout.Write(config.SchemaJSON)
 	case "version", "--version", "-v":
@@ -144,6 +148,27 @@ func runCheck(args []string, writeBaseline bool) error {
 		os.Exit(1)
 	}
 	return nil
+}
+
+// runRules prints every rule applicable to a file, for querying the
+// architecture before writing code (the primary consumer is AI agents).
+func runRules(args []string) error {
+	fs := flag.NewFlagSet("rules", flag.ExitOnError)
+	cfgPath := fs.String("config", "arch.yaml", "config file path")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return fmt.Errorf("usage: lintel rules [--config arch.yaml] <path>")
+	}
+	cfg, err := config.Load(*cfgPath)
+	if err != nil {
+		return err
+	}
+	rel := filepath.ToSlash(filepath.Clean(fs.Arg(0)))
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(rules.Explain(cfg, rel))
 }
 
 const starterConfig = `# yaml-language-server: $schema=https://raw.githubusercontent.com/yasomaru/lintel/main/docs/arch.schema.json
