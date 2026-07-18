@@ -71,11 +71,18 @@
         "type": "object",
         "additionalProperties": false,
         "required": ["target"],
-        "anyOf": [{ "required": ["max-lines"] }, { "required": ["max-imports"] }],
+        "anyOf": [
+          { "required": ["max-lines"] },
+          { "required": ["max-imports"] },
+          { "required": ["max-use-state"] },
+          { "required": ["max-use-effect"] }
+        ],
         "properties": {
           "target": { "$ref": "#/$defs/stringList", "description": "Glob pattern(s) selecting the files to measure." },
           "max-lines": { "type": "integer", "minimum": 1, "description": "Maximum lines per file." },
           "max-imports": { "type": "integer", "minimum": 1, "description": "Maximum import declarations per file (fan-out)." },
+          "max-use-state": { "type": "integer", "minimum": 1, "description": "React: maximum useState( calls per file." },
+          "max-use-effect": { "type": "integer", "minimum": 1, "description": "React: maximum useEffect( calls per file." },
           "reason": { "type": "string" },
           "severity": { "$ref": "#/$defs/severity" }
         }

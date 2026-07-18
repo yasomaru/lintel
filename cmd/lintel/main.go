@@ -28,6 +28,7 @@ Usage:
   lintel graph [path]      print the layer dependency graph (--format mermaid | dot)
   lintel init [--scan]     write a starter arch.yaml (--scan infers layers)
   lintel rules <path>      show the rules that apply to a file, as JSON
+  lintel context [path]    print a Markdown rule summary for CLAUDE.md / AGENTS.md
   lintel schema            print the JSON Schema for arch.yaml
   lintel version           print the version
 
@@ -53,6 +54,8 @@ func main() {
 		err = runInit(os.Args[2:])
 	case "rules":
 		err = runRules(os.Args[2:])
+	case "context":
+		err = runContext(os.Args[2:])
 	case "schema":
 		_, err = os.Stdout.Write(config.SchemaJSON)
 	case "version", "--version", "-v":
@@ -199,21 +202,71 @@ func runGraph(args []string) error {
 // architecture before writing code (the primary consumer is AI agents).
 func runRules(args []string) error {
 	fs := flag.NewFlagSet("rules", flag.ExitOnError)
-	cfgPath := fs.String("config", "arch.yaml", "config file path")
+	cfgPath := fs.String("config", "", "config file path (default: nearest arch.yaml above the file)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {
 		return fmt.Errorf("usage: lintel rules [--config arch.yaml] <path>")
 	}
+	target := fs.Arg(0)
+	if *cfgPath == "" {
+		found, err := findConfig(filepath.Dir(target))
+		if err != nil {
+			return err
+		}
+		*cfgPath = found
+	}
 	cfg, err := config.Load(*cfgPath)
 	if err != nil {
 		return err
 	}
-	rel := filepath.ToSlash(filepath.Clean(fs.Arg(0)))
+	rel := filepath.ToSlash(filepath.Clean(target))
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	return enc.Encode(rules.Explain(cfg, rel))
+}
+
+// findConfig walks upward from dir looking for arch.yaml, so `lintel rules
+// src/domain/user.ts` works from anywhere inside the project.
+func findConfig(dir string) (string, error) {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return "", err
+	}
+	for {
+		candidate := filepath.Join(abs, "arch.yaml")
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+		parent := filepath.Dir(abs)
+		if parent == abs {
+			return "", fmt.Errorf("no arch.yaml found in %s or any parent directory", dir)
+		}
+		abs = parent
+	}
+}
+
+// runContext prints a Markdown summary of the rules for agent instructions.
+func runContext(args []string) error {
+	fs := flag.NewFlagSet("context", flag.ExitOnError)
+	cfgPath := fs.String("config", "", "config file path")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	root := "."
+	if fs.NArg() > 0 {
+		root = fs.Arg(0)
+	}
+	if *cfgPath == "" {
+		*cfgPath = filepath.Join(root, "arch.yaml")
+	}
+	cfg, err := config.Load(*cfgPath)
+	if err != nil {
+		return err
+	}
+	report.Context(os.Stdout, cfg)
+	return nil
 }
 
 const starterConfig = `# yaml-language-server: $schema=https://raw.githubusercontent.com/yasomaru/lintel/main/docs/arch.schema.json

@@ -85,6 +85,48 @@ encapsulation:
 	}
 }
 
+func TestReactHookMetrics(t *testing.T) {
+	cfg := `
+layers:
+  hooks:
+    path: "src/hooks/**"
+metrics:
+  - target: "src/hooks/**"
+    max-use-state: 2
+    max-use-effect: 1
+    reason: fat hook
+`
+	vs := project(t, cfg, map[string]string{
+		"src/hooks/useBig.ts": `import { useState, useEffect } from "react";
+const [a, setA] = useState(0);
+const [b, setB] = useState(0);
+const [c, setC] = useState(0);
+useEffect(() => {}, []);
+useEffect(() => {}, [a]);
+export default a;`,
+		"src/hooks/useOk.ts": `import { useState } from "react";
+const [a, setA] = useState(0);
+export default a;`,
+	})
+	var got []string
+	for _, v := range vs {
+		got = append(got, v.Rule+"|"+v.Detail)
+	}
+	joined := strings.Join(got, "; ")
+	if len(vs) != 2 {
+		t.Fatalf("violations = %d, want 2: %v", len(vs), joined)
+	}
+	if !strings.Contains(joined, "max-use-state: 2|3 useState calls (limit 2)") ||
+		!strings.Contains(joined, "max-use-effect: 1|2 useEffect calls (limit 1)") {
+		t.Errorf("wrong metric violations: %v", joined)
+	}
+	for _, v := range vs {
+		if v.File != "src/hooks/useBig.ts" {
+			t.Errorf("useOk.ts should not violate: %+v", v)
+		}
+	}
+}
+
 func TestSeverityWarn(t *testing.T) {
 	cfg := `
 layers:

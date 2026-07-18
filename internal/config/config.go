@@ -196,6 +196,10 @@ type MetricGroup struct {
 	// Limits. Zero means "not set".
 	MaxLines   int `yaml:"max-lines"`
 	MaxImports int `yaml:"max-imports"`
+	// React-specific: limits on hook call counts per file. Counted as one
+	// occurrence per source line.
+	MaxUseState  int `yaml:"max-use-state"`
+	MaxUseEffect int `yaml:"max-use-effect"`
 }
 
 // StringList accepts either a single YAML string or a list of strings.
@@ -282,8 +286,8 @@ func (c *Config) Validate() error {
 		if len(m.Target) == 0 {
 			return fmt.Errorf("metrics %d: target is required", i+1)
 		}
-		if m.MaxLines == 0 && m.MaxImports == 0 {
-			return fmt.Errorf("metrics %d: at least one limit (max-lines, max-imports) is required", i+1)
+		if m.MaxLines == 0 && m.MaxImports == 0 && m.MaxUseState == 0 && m.MaxUseEffect == 0 {
+			return fmt.Errorf("metrics %d: at least one limit (max-lines, max-imports, max-use-state, max-use-effect) is required", i+1)
 		}
 	}
 	for i, n := range c.Naming {

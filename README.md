@@ -110,6 +110,8 @@ rules:
 metrics:
   - target: "src/hooks/use*.ts"
     max-lines: 150
+    max-use-state: 5    # React: too many states in one hook
+    max-use-effect: 3   # React: effect soup
     reason: Fat hooks mix responsibilities. Split them.
   - target: "src/**/service/**"
     max-lines: 300
@@ -334,6 +336,14 @@ $ lintel rules src/domain/user.ts
 No resident server, no always-loaded tool schemas — the tokens are spent
 only when the agent actually asks.
 
+To give agents the rules up front, `lintel context` emits a compact
+Markdown summary of your architecture — paste it (or generate it in CI)
+into `CLAUDE.md` / `AGENTS.md`:
+
+```console
+$ lintel context >> CLAUDE.md
+```
+
 ## Language support
 
 | Language | Dependency extraction |
@@ -372,9 +382,11 @@ engine.
 - [x] JSON Schema for `arch.yaml` (editor completion, AI generation)
 - [x] `lintel init --scan`: infer a starter config from the existing tree
 - [x] `lintel rules <path>`: let AI agents query the rules *before* writing code
-- [ ] tree-sitter backend + language packs (replaces v0's regex extraction)
-- [ ] Framework-aware metrics (`max-use-state`, `max-public-methods`, ...)
-- [ ] `lintel context`: emit a CLAUDE.md-ready summary of the architecture
+- [x] React metrics (`max-use-state`, `max-use-effect`)
+- [x] `lintel context`: emit a CLAUDE.md-ready summary of the architecture
+- [ ] tree-sitter backend + language packs (replaces v0's regex extraction;
+      needs a cgo-compatible release pipeline, so it lands as its own major effort)
+- [ ] Deeper structural metrics (`max-public-methods`, `max-method-lines`) on the tree-sitter backend
 
 ## Contributing
 

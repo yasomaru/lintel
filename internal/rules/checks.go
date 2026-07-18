@@ -34,8 +34,22 @@ func TextPatterns(cfg *config.Config) []string {
 	for _, b := range cfg.Bans {
 		add(b.Calls)
 	}
+	for _, m := range cfg.Metrics {
+		if m.MaxUseState > 0 {
+			add([]string{useStatePattern})
+		}
+		if m.MaxUseEffect > 0 {
+			add([]string{useEffectPattern})
+		}
+	}
 	return out
 }
+
+// React hook call markers counted by the max-use-* metrics.
+const (
+	useStatePattern  = "useState("
+	useEffectPattern = "useEffect("
+)
 
 func checkNaming(cfg *config.Config, f scan.File, res *analyze.Result) []Violation {
 	var out []Violation
@@ -153,8 +167,32 @@ func checkPairing(cfg *config.Config, files []scan.File) []Violation {
 		return nil
 	}
 	paths := make([]string, len(files))
+	byBase := map[string][]string{}
 	for i, f := range files {
 		paths[i] = f.Path
+		byBase[path.Base(f.Path)] = append(byBase[path.Base(f.Path)], f.Path)
+	}
+	// Memoize per concrete pattern; when the pattern's base name is literal
+	// (the common "{name}.test.ts" case), only same-basename files are
+	// glob-matched instead of the whole tree.
+	memo := map[string]bool{}
+	exists := func(want string) bool {
+		if v, ok := memo[want]; ok {
+			return v
+		}
+		v := false
+		if base := path.Base(want); !strings.ContainsAny(base, "*?[{") {
+			for _, p := range byBase[base] {
+				if ok, _ := doublestar.Match(want, p); ok {
+					v = true
+					break
+				}
+			}
+		} else {
+			v = anyMatch(paths, want)
+		}
+		memo[want] = v
+		return v
 	}
 	var out []Violation
 	for _, p := range cfg.Pairing {
@@ -165,7 +203,7 @@ func checkPairing(cfg *config.Config, files []scan.File) []Violation {
 			base := path.Base(f.Path)
 			name := strings.TrimSuffix(base, path.Ext(base))
 			want := strings.ReplaceAll(p.Requires, "{name}", name)
-			if anyMatch(paths, want) {
+			if exists(want) {
 				continue
 			}
 			out = append(out, Violation{

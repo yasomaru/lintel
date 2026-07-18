@@ -4,6 +4,7 @@ package rules
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/yasomaru/lintel/internal/analyze"
 	"github.com/yasomaru/lintel/internal/config"
@@ -183,6 +184,35 @@ func checkMetrics(cfg *config.Config, f scan.File, res *analyze.Result) []Violat
 				Severity: severityOf(m.Severity),
 				key:      f.Path + "|" + rule,
 			})
+		}
+		for _, hm := range []struct {
+			limit   int
+			name    string
+			pattern string
+		}{
+			{m.MaxUseState, "max-use-state", useStatePattern},
+			{m.MaxUseEffect, "max-use-effect", useEffectPattern},
+		} {
+			if hm.limit == 0 {
+				continue
+			}
+			n := 0
+			for _, hit := range res.Hits {
+				if hit.Pattern == hm.pattern {
+					n++
+				}
+			}
+			if n > hm.limit {
+				rule := fmt.Sprintf("%s: %d", hm.name, hm.limit)
+				out = append(out, Violation{
+					File:     f.Path,
+					Rule:     rule,
+					Detail:   fmt.Sprintf("%d %s calls (limit %d)", n, strings.TrimSuffix(hm.pattern, "("), hm.limit),
+					Reason:   m.Reason,
+					Severity: severityOf(m.Severity),
+					key:      f.Path + "|" + rule,
+				})
+			}
 		}
 	}
 	return out
