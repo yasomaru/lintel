@@ -28,7 +28,7 @@ Usage:
 
 Flags for check:
   --config <file>   config file (default: arch.yaml under the target path)
-  --format <fmt>    output format: text | json (default: text)
+  --format <fmt>    output format: text | json | github (default: text)
 `
 
 func main() {
@@ -85,15 +85,11 @@ func runCheck(args []string, writeBaseline bool) error {
 	for i, f := range files {
 		relPaths[i] = f.Path
 	}
-	proj := analyze.NewProject(root, relPaths, rules.TextPatterns(cfg))
-	results := make(map[string]*analyze.Result, len(files))
-	for _, f := range files {
-		res, err := proj.File(f.Path)
-		if err != nil {
-			continue // unreadable or unsupported files are skipped, not fatal
-		}
-		results[f.Path] = res
-	}
+	proj := analyze.NewProject(root, relPaths, analyze.Options{
+		Patterns: rules.TextPatterns(cfg),
+		Aliases:  cfg.AliasMap(),
+	})
+	results := proj.All(relPaths)
 
 	violations := rules.Check(cfg, root, files, results)
 
@@ -128,12 +124,17 @@ func runCheck(args []string, writeBaseline bool) error {
 		Files:      len(files),
 		OK:         len(violations) == 0,
 	}
-	if *format == "json" {
+	switch *format {
+	case "json":
 		if err := report.JSON(os.Stdout, sum); err != nil {
 			return err
 		}
-	} else {
+	case "github":
+		report.GitHub(os.Stdout, sum)
+	case "text":
 		report.Human(os.Stdout, sum)
+	default:
+		return fmt.Errorf("unknown format %q (want text, json, or github)", *format)
 	}
 	if !sum.OK {
 		os.Exit(1)

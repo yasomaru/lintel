@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/yasomaru/lintel/internal/rules"
 )
@@ -49,6 +50,30 @@ func styles(w io.Writer) palette {
 		dim: "\x1b[2m", bold: "\x1b[1m", reset: "\x1b[0m",
 	}
 }
+
+// GitHub writes violations as GitHub Actions workflow commands, which
+// GitHub renders as inline annotations on the PR diff.
+func GitHub(w io.Writer, s Summary) {
+	for _, v := range s.Violations {
+		line := v.Line
+		if line == 0 {
+			line = 1
+		}
+		msg := v.Detail
+		if v.Reason != "" {
+			msg += " — " + v.Reason
+		}
+		fmt.Fprintf(w, "::error file=%s,line=%d,title=%s::%s\n",
+			v.File, line, escapeProperty("lintel: "+v.Rule), escapeData(msg))
+	}
+	fmt.Fprintf(w, "%d file(s) checked, %d violation(s)\n", s.Files, len(s.Violations))
+}
+
+var dataEscaper = strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A")
+var propEscaper = strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A", ":", "%3A", ",", "%2C")
+
+func escapeData(s string) string     { return dataEscaper.Replace(s) }
+func escapeProperty(s string) string { return propEscaper.Replace(s) }
 
 // Human writes a human-readable report.
 func Human(w io.Writer, s Summary) {

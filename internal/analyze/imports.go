@@ -45,13 +45,25 @@ type Project struct {
 	// Patterns are forbidden substrings to search for in every file
 	// (suppression markers, placeholders, banned calls).
 	Patterns []string
+	// aliases resolve bare specifiers like "@/domain/user" to project paths.
+	aliases []aliasRule
 	// files is the set of known project files (slash-relative paths).
 	files map[string]bool
 }
 
+// Options tunes project analysis.
+type Options struct {
+	// Patterns are forbidden substrings to search for in every file.
+	Patterns []string
+	// Aliases are manual import aliases ("@/*" -> "src/*"). They take
+	// precedence over aliases auto-detected from tsconfig.json.
+	Aliases map[string][]string
+}
+
 // NewProject builds resolution context for the given root and file set.
-func NewProject(root string, relPaths []string, patterns []string) *Project {
-	p := &Project{Root: root, Patterns: patterns, files: make(map[string]bool, len(relPaths))}
+func NewProject(root string, relPaths []string, opts Options) *Project {
+	p := &Project{Root: root, Patterns: opts.Patterns, files: make(map[string]bool, len(relPaths))}
+	p.aliases = buildAliases(root, opts.Aliases)
 	for _, f := range relPaths {
 		p.files[f] = true
 	}
@@ -82,7 +94,7 @@ func (p *Project) File(rel string) (*Result, error) {
 	case ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs":
 		res.Imports = p.jsImports(rel, src)
 	case ".py":
-		res.Imports = p.pyImports(src)
+		res.Imports = p.pyImports(rel, src)
 	default:
 		return res, fmt.Errorf("unsupported extension: %s", rel)
 	}
@@ -165,9 +177,15 @@ func (p *Project) jsImports(rel, src string) []Import {
 
 func (p *Project) resolveJS(rel, raw string) string {
 	if !strings.HasPrefix(raw, "./") && !strings.HasPrefix(raw, "../") {
-		return "" // bare specifier: external package (alias support is planned)
+		// Bare specifier: try aliases; otherwise it's an external package.
+		return p.resolveAlias(raw)
 	}
-	base := path.Join(path.Dir(rel), raw)
+	return p.tryJSFile(path.Join(path.Dir(rel), raw))
+}
+
+// tryJSFile resolves a project-relative base path to an actual file,
+// trying the JS/TS extensions and index files.
+func (p *Project) tryJSFile(base string) string {
 	candidates := []string{base}
 	for _, ext := range jsExts {
 		candidates = append(candidates, base+ext, path.Join(base, "index"+ext))
@@ -184,24 +202,39 @@ func (p *Project) resolveJS(rel, raw string) string {
 
 var pyImport = regexp.MustCompile(`(?m)^\s*(?:from\s+([.\w]+)\s+import|import\s+([.\w]+))`)
 
-func (p *Project) pyImports(src string) []Import {
+func (p *Project) pyImports(rel, src string) []Import {
 	var out []Import
 	for _, m := range pyImport.FindAllStringSubmatchIndex(src, -1) {
 		for _, g := range []int{1, 2} {
 			if m[2*g] >= 0 {
 				raw := src[m[2*g]:m[2*g+1]]
-				out = append(out, Import{Raw: raw, Resolved: p.resolvePy(raw), Line: lineAt(src, m[2*g])})
+				out = append(out, Import{Raw: raw, Resolved: p.resolvePy(rel, raw), Line: lineAt(src, m[2*g])})
 			}
 		}
 	}
 	return out
 }
 
-func (p *Project) resolvePy(raw string) string {
+func (p *Project) resolvePy(rel, raw string) string {
+	base := ""
 	if strings.HasPrefix(raw, ".") {
-		return "" // relative imports need package context; planned
+		// Relative import: one dot is the file's package, each extra dot
+		// walks one package up. "from ..models.user import U" etc.
+		dots := 0
+		for dots < len(raw) && raw[dots] == '.' {
+			dots++
+		}
+		dir := path.Dir(rel)
+		for i := 1; i < dots; i++ {
+			dir = path.Dir(dir)
+		}
+		base = dir
+		if rest := raw[dots:]; rest != "" {
+			base = path.Join(dir, strings.ReplaceAll(rest, ".", "/"))
+		}
+	} else {
+		base = strings.ReplaceAll(raw, ".", "/")
 	}
-	base := strings.ReplaceAll(raw, ".", "/")
 	for _, c := range []string{base + ".py", base + "/__init__.py"} {
 		if p.files[c] {
 			return c

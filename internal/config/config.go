@@ -35,6 +35,8 @@ type Config struct {
 	Coverage *Coverage `yaml:"coverage"`
 	// Pairing requires companion files (e.g. tests) to exist.
 	Pairing []PairRule `yaml:"pairing"`
+	// Resolve tunes import resolution (path aliases etc.).
+	Resolve *Resolve `yaml:"resolve"`
 	// Baseline is a path to a JSON file holding grandfathered violations.
 	Baseline string `yaml:"baseline"`
 	// Strict makes undeclared dependencies between layers a violation.
@@ -91,6 +93,25 @@ type PairRule struct {
 	Target   StringList `yaml:"target"`
 	Requires string     `yaml:"requires"`
 	Reason   string     `yaml:"reason"`
+}
+
+// Resolve tunes import resolution.
+type Resolve struct {
+	// Aliases maps import prefixes to project paths, tsconfig-style:
+	// "@/*": "src/*". Merged with tsconfig.json paths; these win.
+	Aliases map[string]StringList `yaml:"aliases"`
+}
+
+// AliasMap returns the manual aliases as plain string slices.
+func (c *Config) AliasMap() map[string][]string {
+	if c.Resolve == nil || len(c.Resolve.Aliases) == 0 {
+		return nil
+	}
+	out := make(map[string][]string, len(c.Resolve.Aliases))
+	for k, v := range c.Resolve.Aliases {
+		out[k] = v
+	}
+	return out
 }
 
 // Layer describes one architectural layer.

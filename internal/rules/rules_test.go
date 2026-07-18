@@ -40,7 +40,7 @@ func project(t *testing.T, cfgYAML string, files map[string]string) []Violation 
 	for i, f := range scanned {
 		rels[i] = f.Path
 	}
-	proj := analyze.NewProject(root, rels, TextPatterns(cfg))
+	proj := analyze.NewProject(root, rels, analyze.Options{Patterns: TextPatterns(cfg), Aliases: cfg.AliasMap()})
 	results := make(map[string]*analyze.Result)
 	for _, f := range scanned {
 		res, err := proj.File(f.Path)

@@ -38,8 +38,9 @@ JSON output that AI agents can read and fix against.
 - **Adoptable in brownfield codebases.** `lintel baseline` quarantines
   existing violations so only *new* ones fail the build. Pay the debt down
   at your own pace.
-- **Fast.** Single static binary, parses imports only (no type checking).
-  Suitable for pre-commit hooks and editor save actions.
+- **Fast.** Single static binary, parses imports only (no type checking),
+  analyzes files in parallel. A 5,000-file project checks in ~0.5s on a
+  laptop — suitable for pre-commit hooks and editor save actions.
 
 ## Install
 
@@ -141,6 +142,10 @@ pairing:
     requires: "tests/**/{name}.test.ts"
     reason: Every use case ships with a test.
 
+resolve:
+  aliases:
+    "@/*": "src/*"   # tsconfig.json paths are auto-detected; this overrides
+
 baseline: .lintel-baseline.json
 # strict: true   # undeclared layer dependencies also fail
 ```
@@ -183,8 +188,11 @@ jobs:
       - uses: actions/checkout@v4
       - run: |
           curl -sL https://github.com/yasomaru/lintel/releases/latest/download/lintel_linux_amd64.tar.gz | tar xz
-          ./lintel check
+          ./lintel check --format github
 ```
+
+With `--format github`, violations appear as inline annotations on the PR
+diff, each carrying the rule's `reason`.
 
 Adoption flow for an existing codebase:
 
@@ -237,8 +245,8 @@ offending code, and fixes it before you ever review it.
 | Language | Dependency extraction |
 |----------|----------------------|
 | Go       | `import` declarations, resolved via `go.mod` module path |
-| TS / JS  | `import` / `export from` / `require()` / dynamic `import()`, relative paths |
-| Python   | `import` / `from ... import`, absolute module paths |
+| TS / JS  | `import` / `export from` / `require()` / dynamic `import()`; relative paths and path aliases (auto-detected from `tsconfig.json` / `jsconfig.json` `paths`, or set via `resolve.aliases`) |
+| Python   | `import` / `from ... import`, absolute and relative (`from . import x`) module paths |
 
 Dependency gate manifests: `package.json`, `go.mod`, `requirements.txt`.
 
@@ -246,7 +254,8 @@ Dependency gate manifests: `package.json`, `go.mod`, `requirements.txt`.
 
 - Import extraction is regex-based (except Go). Import-like strings inside
   comments or string literals can produce false positives.
-- TS path aliases (`@/...`) and Python relative imports are not resolved yet.
+- Alias detection reads the root `tsconfig.json` only; per-package tsconfigs
+  in a monorepo need explicit `resolve.aliases` for now.
 - `suppressions` / `placeholders` / `calls` are substring matches — a pattern
   appearing in a doc comment also counts. (lintel's own CI once flagged
   lintel's source for mentioning a suppression marker in a comment. We fixed
@@ -258,10 +267,10 @@ engine.
 
 ## Roadmap
 
+- [x] TS path aliases (`@/...`) and Python relative imports
+- [x] `--format github` for PR line annotations
 - [ ] tree-sitter backend + language packs (replaces v0's regex extraction)
-- [ ] TS path aliases (`@/...`) and Python relative imports
 - [ ] Framework-aware metrics (`max-use-state`, `max-public-methods`, ...)
-- [ ] `--format github` for PR line annotations
 - [ ] JSON Schema for `arch.yaml` (editor completion, AI generation)
 - [ ] `lintel init --scan`: infer a starter config from the existing tree
 - [ ] MCP server mode: let AI agents query the rules *before* writing code
