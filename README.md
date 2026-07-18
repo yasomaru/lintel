@@ -285,8 +285,11 @@ only when the agent actually asks.
 | Go       | `import` declarations, resolved via `go.mod` module path |
 | TS / JS  | `import` / `export from` / `require()` / dynamic `import()`; relative paths and path aliases (auto-detected from `tsconfig.json` / `jsconfig.json` `paths`, or set via `resolve.aliases`) |
 | Python   | `import` / `from ... import`, absolute and relative (`from . import x`) module paths |
+| Java     | `import` declarations incl. `static` and wildcard, resolved by package-path suffix — works with any source root (`src/main/java`, plain `src`, ...) |
 
-Dependency gate manifests: `package.json`, `go.mod`, `requirements.txt`.
+Dependency gate manifests: `package.json`, `go.mod`, `requirements.txt`,
+`pom.xml`, `build.gradle` / `build.gradle.kts` (Java deps are matched as
+`"group:artifact"`, e.g. `deny: ["org.projectlombok:*"]`).
 
 ### Known limitations (v0)
 
@@ -294,6 +297,9 @@ Dependency gate manifests: `package.json`, `go.mod`, `requirements.txt`.
   comments or string literals can produce false positives.
 - Alias detection reads the root `tsconfig.json` only; per-package tsconfigs
   in a monorepo need explicit `resolve.aliases` for now.
+- Java classes in the *same* package are visible without an `import`, so a
+  same-package dependency crossing layer boundaries is invisible to lintel.
+  In practice layers map to distinct packages, where imports are required.
 - `suppressions` / `placeholders` / `calls` are substring matches — a pattern
   appearing in a doc comment also counts. (lintel's own CI once flagged
   lintel's source for mentioning a suppression marker in a comment. We fixed

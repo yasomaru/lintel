@@ -12,6 +12,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -49,6 +50,9 @@ type Project struct {
 	aliases []aliasRule
 	// files is the set of known project files (slash-relative paths).
 	files map[string]bool
+	// javaFiles is a sorted list of .java files, for suffix-based
+	// package resolution independent of the source root layout.
+	javaFiles []string
 }
 
 // Options tunes project analysis.
@@ -64,6 +68,12 @@ type Options struct {
 func NewProject(root string, relPaths []string, opts Options) *Project {
 	p := &Project{Root: root, Patterns: opts.Patterns, files: make(map[string]bool, len(relPaths))}
 	p.aliases = buildAliases(root, opts.Aliases)
+	for _, f := range relPaths {
+		if strings.HasSuffix(f, ".java") {
+			p.javaFiles = append(p.javaFiles, f)
+		}
+	}
+	sort.Strings(p.javaFiles)
 	for _, f := range relPaths {
 		p.files[f] = true
 	}
@@ -95,6 +105,8 @@ func (p *Project) File(rel string) (*Result, error) {
 		res.Imports = p.jsImports(rel, src)
 	case ".py":
 		res.Imports = p.pyImports(rel, src)
+	case ".java":
+		res.Imports = p.javaImports(src)
 	default:
 		return res, fmt.Errorf("unsupported extension: %s", rel)
 	}

@@ -21,9 +21,10 @@ type PatternHit struct {
 var (
 	// Top-level exported declarations. Var/const blocks and methods are not
 	// covered in v0; the tree-sitter backend will close that gap.
-	goExport = regexp.MustCompile(`(?m)^(?:func|type|var|const)\s+([A-Z]\w*)`)
-	jsExport = regexp.MustCompile(`(?m)^\s*export\s+(?:default\s+)?(?:abstract\s+)?(?:async\s+)?(?:function\*?|class|const|let|var|interface|type|enum)\s+(\w+)`)
-	pyTop    = regexp.MustCompile(`(?m)^(?:def|class)\s+([A-Za-z]\w*)`)
+	goExport   = regexp.MustCompile(`(?m)^(?:func|type|var|const)\s+([A-Z]\w*)`)
+	jsExport   = regexp.MustCompile(`(?m)^\s*export\s+(?:default\s+)?(?:abstract\s+)?(?:async\s+)?(?:function\*?|class|const|let|var|interface|type|enum)\s+(\w+)`)
+	pyTop      = regexp.MustCompile(`(?m)^(?:def|class)\s+([A-Za-z]\w*)`)
+	javaPublic = regexp.MustCompile(`(?m)^\s*public\s+(?:final\s+|abstract\s+|sealed\s+|non-sealed\s+|static\s+|strictfp\s+)*(?:class|interface|enum|record|@interface)\s+(\w+)`)
 )
 
 // exports extracts exported top-level symbols for the file's language.
@@ -36,6 +37,8 @@ func exports(rel, src string) []Symbol {
 		re = jsExport
 	case ".py":
 		re = pyTop
+	case ".java":
+		re = javaPublic
 	default:
 		return nil
 	}

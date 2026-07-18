@@ -3,10 +3,12 @@ package rules
 import (
 	"bufio"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
@@ -242,6 +244,10 @@ func collectDeps(root string) []manifestDep {
 	out = append(out, packageJSONDeps(filepath.Join(root, "package.json"))...)
 	out = append(out, goModDeps(filepath.Join(root, "go.mod"))...)
 	out = append(out, requirementsDeps(filepath.Join(root, "requirements.txt"))...)
+	out = append(out, pomDeps(filepath.Join(root, "pom.xml"))...)
+	for _, name := range []string{"build.gradle", "build.gradle.kts"} {
+		out = append(out, gradleDeps(filepath.Join(root, name), name)...)
+	}
 	return out
 }
 
@@ -293,6 +299,52 @@ func goModDeps(path string) []manifestDep {
 			if fields := strings.Fields(t); len(fields) >= 3 {
 				out = append(out, manifestDep{Name: fields[1], File: "go.mod", Line: line})
 			}
+		}
+	}
+	return out
+}
+
+// pomDeps reads Maven dependencies as "groupId:artifactId".
+func pomDeps(path string) []manifestDep {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var pom struct {
+		Dependencies struct {
+			Dependency []struct {
+				GroupID    string `xml:"groupId"`
+				ArtifactID string `xml:"artifactId"`
+			} `xml:"dependency"`
+		} `xml:"dependencies"`
+	}
+	if err := xml.Unmarshal(data, &pom); err != nil {
+		return nil
+	}
+	var out []manifestDep
+	for _, d := range pom.Dependencies.Dependency {
+		if d.GroupID != "" && d.ArtifactID != "" {
+			out = append(out, manifestDep{Name: d.GroupID + ":" + d.ArtifactID, File: "pom.xml"})
+		}
+	}
+	return out
+}
+
+// gradleCoord matches quoted "group:artifact:version" coordinates.
+var gradleCoord = regexp.MustCompile(`["']([\w.\-]+):([\w.\-]+):[^"']+["']`)
+
+// gradleDeps reads Gradle dependency coordinates as "group:artifact".
+func gradleDeps(path, display string) []manifestDep {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	var out []manifestDep
+	sc := bufio.NewScanner(f)
+	for line := 1; sc.Scan(); line++ {
+		for _, m := range gradleCoord.FindAllStringSubmatch(sc.Text(), -1) {
+			out = append(out, manifestDep{Name: m[1] + ":" + m[2], File: display, Line: line})
 		}
 	}
 	return out

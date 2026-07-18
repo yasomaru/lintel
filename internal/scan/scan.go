@@ -23,7 +23,7 @@ type File struct {
 // language packs will own this once the tree-sitter backend lands.
 var sourceExts = map[string]bool{
 	".go": true, ".ts": true, ".tsx": true, ".js": true, ".jsx": true,
-	".mjs": true, ".cjs": true, ".py": true,
+	".mjs": true, ".cjs": true, ".py": true, ".java": true,
 }
 
 var skipDirs = map[string]bool{
