@@ -73,10 +73,16 @@ $ lintel check --format json   # structured output for CI / AI agents
 $ lintel baseline              # grandfather existing violations
 ```
 
-`init --scan` walks your tree, recognizes conventional layer directories
-(`domain`, `usecase`, `infra`, `hooks`, `components`, ...), and writes a
-proposed `arch.yaml` — including a `deny: domain -> "*"` rule when it finds
-a domain layer. Plain `lintel init` writes a minimal template instead.
+`init --scan` detects your layers (conventional directory names like
+`domain`, `infra`, `hooks`, or your top-level directories as a fallback),
+then **analyzes the real imports** and writes every dependency direction
+that exists today as an `allow` rule under `strict: true`. The generated
+config always passes on the tree it came from; from then on, any *new*
+dependency direction fails the check until someone adds it to the config —
+your current architecture becomes the enforced one, whatever style it is.
+A `domain` layer that is already dependency-free additionally gets locked
+down with `deny: domain -> "*"`. Plain `lintel init` writes a minimal
+template instead.
 
 ## Configuration
 

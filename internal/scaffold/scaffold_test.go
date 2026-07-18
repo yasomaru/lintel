@@ -6,7 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yasomaru/lintel/internal/analyze"
 	"github.com/yasomaru/lintel/internal/config"
+	"github.com/yasomaru/lintel/internal/rules"
+	"github.com/yasomaru/lintel/internal/scan"
 )
 
 func tree(t *testing.T, files map[string]string) string {
@@ -24,7 +27,8 @@ func tree(t *testing.T, files map[string]string) string {
 	return root
 }
 
-// generate runs Generate and asserts the output is a loadable config.
+// generate runs Generate and asserts the output loads AND passes a full
+// check against the very tree it was generated from.
 func generate(t *testing.T, files map[string]string) string {
 	t.Helper()
 	root := tree(t, files)
@@ -36,27 +40,58 @@ func generate(t *testing.T, files map[string]string) string {
 	if err := os.WriteFile(cfgPath, []byte(out), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := config.Load(cfgPath); err != nil {
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
 		t.Fatalf("generated config does not load: %v\n---\n%s", err, out)
+	}
+	scanned, err := scan.Walk(root, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rels := make([]string, len(scanned))
+	for i, f := range scanned {
+		rels[i] = f.Path
+	}
+	results := analyze.NewProject(root, rels, analyze.Options{}).All(rels)
+	if vs := rules.Check(cfg, root, scanned, results); len(vs) != 0 {
+		t.Fatalf("generated config fails on its own tree: %+v\n---\n%s", vs, out)
 	}
 	return out
 }
 
-func TestGenerateDetectsKnownLayers(t *testing.T) {
+func TestGenerateRecordsObservedEdges(t *testing.T) {
 	out := generate(t, map[string]string{
 		"src/domain/user.ts":        "export const u = 1;",
-		"src/infra/db.ts":           "export const db = 1;",
-		"src/hooks/useAuth.ts":      "export const a = 1;",
+		"src/infra/db.ts":           `import { u } from "../domain/user"; export const db = u;`,
+		"src/hooks/useAuth.ts":      `import { db } from "../infra/db"; export const a = db;`,
 		"apps/web/components/b.tsx": "export const b = 1;",
 	})
 	for _, want := range []string{
-		`domain:`, `path: "src/domain/**"`,
-		`infra:`, `hooks:`, `components:`,
-		`deny: domain -> "*"`, `allow: infra -> domain`,
+		`domain:`, `path: "src/domain/**"`, `infra:`, `hooks:`, `components:`,
+		"strict: true",
+		"allow: infra -> domain",
+		"allow: hooks -> infra",
+		`deny: domain -> "*"`, // domain has no outgoing deps -> locked down
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in:\n%s", want, out)
 		}
+	}
+}
+
+func TestGenerateImpureDomainOnlySuggestsDeny(t *testing.T) {
+	out := generate(t, map[string]string{
+		"src/domain/user.ts": `import { db } from "../infra/db"; export const u = db;`,
+		"src/infra/db.ts":    "export const db = 1;",
+	})
+	if !strings.Contains(out, "allow: domain -> infra") {
+		t.Errorf("observed edge missing:\n%s", out)
+	}
+	if !strings.Contains(out, `# - deny: domain -> "*"`) {
+		t.Errorf("deny should be a commented suggestion for an impure domain:\n%s", out)
+	}
+	if strings.Contains(out, "\n  - deny: domain") {
+		t.Errorf("deny must not be active for an impure domain:\n%s", out)
 	}
 }
 
