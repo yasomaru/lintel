@@ -1,0 +1,26 @@
+# lintel checks itself with this config (dogfooding).
+layers:
+  cli:
+    path: "cmd/**"
+    description: Command-line entry points. Wiring only, no core logic.
+  core:
+    path: "internal/**"
+    description: Config, scanning, analysis, rule evaluation, reporting.
+
+rules:
+  - allow: cli -> core
+  - deny: core -> cli
+    reason: Core packages must stay usable as a library, independent of the CLI.
+
+coverage:
+  require-layer: true
+  reason: Every source file must live inside a declared layer.
+
+suppressions:
+  deny: ["//nolint"]
+  reason: Fix the root cause instead of silencing the linter.
+
+dependencies:
+  policy: allowlist
+  allow: ["github.com/bmatcuk/doublestar/*", "gopkg.in/yaml.v3"]
+  reason: Keep the dependency footprint minimal; new deps need a config change.
