@@ -1,9 +1,13 @@
 # lintel
 
 [![CI](https://github.com/yasomaru/lintel/actions/workflows/ci.yml/badge.svg)](https://github.com/yasomaru/lintel/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fyasomaru%2Flintel%2Fbadges%2Fcoverage.json)](https://github.com/yasomaru/lintel/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/yasomaru/lintel)](https://github.com/yasomaru/lintel/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/yasomaru/lintel/total?label=downloads)](https://github.com/yasomaru/lintel/releases)
+[![Go Reference](https://pkg.go.dev/badge/github.com/yasomaru/lintel.svg)](https://pkg.go.dev/github.com/yasomaru/lintel)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/yasomaru/lintel)](go.mod)
+[![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-8250df)](https://github.com/yasomaru/lintel/releases/latest)
+[![Last Commit](https://img.shields.io/github/last-commit/yasomaru/lintel)](https://github.com/yasomaru/lintel/commits/main)
 [![License: MIT](https://img.shields.io/github/license/yasomaru/lintel)](LICENSE)
 
 **Architecture lint for any language.** Declare your layers and rules in one
